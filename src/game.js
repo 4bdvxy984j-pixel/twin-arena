@@ -84,6 +84,132 @@ const ABILITIES = {
 // now shows it as a gold frame; the referee tags it in the combo list.
 const COMBO = { markDrownMs: 3000, markDrownMult: 1.5, coldTrailMs: 5000, coldTrailDump: 12 };
 
+// ---- MODS v1 (Steven, 2026-11-27) ------------------------------------------
+// Two families, one law: everything is dealt into the fight stats and
+// enforced by the referee, exactly like abilities and gear.
+// FITTED mods socket onto ONE tool (one per tool) at the satchel, between
+// fights, under the same swap law as gear — refused mid-Descent-run. Each
+// changes its tool's referee math in one distinct way.
+// DEPLOYABLE mods ride the MOD RAIL on the fight screen: chunky buttons a
+// live player fires mid-fight ('mod:<id>' in the log), each with a small
+// charge count per fight, refilled between fights. A devil never fires one —
+// devils submit no log; only the live challenger's dealt rail exists.
+// Mods are UNNUMBERED and PERMANENT in v1: no serials, no charges on the
+// item itself, no expiry. The uses-and-expiry economy belongs to the Forge.
+const FITTED_MODS = {
+  throughline: { tool: 'probe', name: 'THROUGHLINE', sigil: '◎', color: '#00e5ff',
+    line: 'Socketed on your Probe: its marks burn 75% longer — and striking a Decoy re-threads the mark instead of losing it. The mark goes through.' },
+  emberline: { tool: 'flood', name: 'EMBERLINE', sigil: '♨', color: '#ff2a6d',
+    line: 'Socketed on your Flood: every strike lays a slow ember on the gate — 1.0 damage a second for 4 seconds.' },
+  ashenveil: { tool: 'whisper', name: 'ASHEN VEIL', sigil: '≋', color: '#b967ff',
+    line: 'Socketed on your Whisper: every strike sheds 8% of your trace into the ash.' },
+  paybackcoil: { tool: 'decoy', name: 'PAYBACK COIL', sigil: '↩', color: '#fcee0a',
+    line: 'Socketed on your Decoy: while the phantom stands (5s), a quarter of every blow you take coils into your next strike, up to +12. Punishment, returned.' }
+};
+const DEPLOY_MODS = {
+  overclock: { name: 'OVERCLOCK', sigil: '⏩', color: '#00e5ff', charges: 2,
+    line: 'Fire it and your next strike resolves hasted — its cooldown is halved.' },
+  tracepurge: { name: 'TRACE PURGE', sigil: '✜', color: '#5dffa0', charges: 2,
+    line: 'Fire it and 35% of your trace burns off on the spot.' },
+  ghostplate: { name: 'GHOST PLATE', sigil: '⛨', color: '#b967ff', charges: 2,
+    line: 'Fire it and for 8 seconds the blows you take feed a hidden plate — half their weight, up to +20 — discharged into your first strike after the plate closes. They cannot see it charging.' },
+  coldsnap: { name: 'COLD SNAP', sigil: '❄', color: '#7df9ff', charges: 2,
+    line: 'Fire it and the Twin\u2019s next strike freezes mid-rhythm — it lands 1.2 seconds late.' }
+};
+const MODS_ALL = Object.assign({}, FITTED_MODS, DEPLOY_MODS);
+const MOD_NUMBERS = {
+  markMult: 1.75,          // THROUGHLINE: the mark lasts this much longer
+  floodBurnDps: 1.0, floodBurnSecs: 4,   // EMBERLINE
+  whisperShed: 8,          // ASHEN VEIL: trace shed per Whisper strike
+  paybackRate: 0.25, paybackCap: 12, phantomMs: 5000,  // PAYBACK COIL
+  purgeAmount: 35,         // TRACE PURGE
+  plateMs: 8000, plateRate: 0.5, plateCap: 20,         // GHOST PLATE
+  coldsnapMs: 1200         // COLD SNAP
+};
+// Where mods come from (v1): the Descent pays them out of the same seeded
+// drop rng as gear (rolled AFTER the gear, so the gear books never shift),
+// and a Pit breach occasionally leaves one in the hunter's hands.
+const MOD_DROPS = {
+  descent: {
+    normal: { fitted: 0.12, deploy: 0 },
+    elite: { fitted: 0.20, deploy: 0.10 },
+    boss: { fitted: 0.35, deploy: 0.25 },
+    vault: { fitted: 0.15, deploy: 0 }   // once per Vault, if any shape cracked
+  },
+  pitWin: 0.12
+};
+function ensureMods(player) {
+  if (!player) return player;
+  if (!player.modsOwned || typeof player.modsOwned !== 'object') player.modsOwned = {};
+  if (!player.modsFitted || typeof player.modsFitted !== 'object') player.modsFitted = {};
+  for (const t of TOOL_IDS) if (!(t in player.modsFitted)) player.modsFitted[t] = null;
+  return player;
+}
+// The fitted mod actually in force for a tool: socketed AND owned. Anything
+// else (a stale socket, a borrowed claim) reads as bare — the referee only
+// ever sees what effectiveStats deals from this.
+function fittedMod(player, tool) {
+  if (!player || !player.modsFitted || !player.modsOwned) return null;
+  const id = player.modsFitted[tool];
+  return id && FITTED_MODS[id] && FITTED_MODS[id].tool === tool && player.modsOwned[id] ? id : null;
+}
+function grantMod(player, id) {
+  ensureMods(player);
+  if (!MODS_ALL[id] || player.modsOwned[id]) return false;
+  player.modsOwned[id] = true;
+  return true;
+}
+// Socket (or unsocket, modId null) a fitted mod. One mod per tool, one tool
+// per mod — a fitted mod's home is fixed by its design.
+function fitMod(player, tool, modId) {
+  ensureMods(player);
+  if (!TOOL_IDS.includes(tool)) return 'no such tool';
+  if (modId == null || modId === '') { player.modsFitted[tool] = null; return null; }
+  const def = FITTED_MODS[modId];
+  if (!def) return 'no such fitted mod';
+  if (def.tool !== tool) return def.name + ' sockets onto the ' + TOOLS[def.tool].name + ', not the ' + TOOLS[tool].name;
+  if (!player.modsOwned[modId]) return 'you do not own ' + def.name + ' yet — the depths provide';
+  player.modsFitted[tool] = modId;
+  return null;
+}
+// Roll for a mod the fighter does not own yet. kind: 'fitted' | 'deploy' |
+// 'any'. Returns the mod id granted (and grants it), or null when the shelf
+// for that kind is already complete — a finished collection rolls no ghosts.
+function rollModDrop(rng, player, kind) {
+  ensureMods(player);
+  const pool = Object.keys(MODS_ALL).filter(id => {
+    if (player.modsOwned[id]) return false;
+    if (kind === 'fitted') return !!FITTED_MODS[id];
+    if (kind === 'deploy') return !!DEPLOY_MODS[id];
+    return true;
+  });
+  if (!pool.length) return null;
+  const id = pool[Math.floor(rng() * pool.length)];
+  grantMod(player, id);
+  return id;
+}
+// The Descent's mod drops for one cleared depth, rolled from the run's own
+// seeded rng (after the gear rolls). Mutates the player (grants land in the
+// satchel on the spot — mods are small, and death does not take them in v1).
+function rollDescentMods(rng, player, kind) {
+  const table = MOD_DROPS.descent[kind];
+  if (!table) return [];
+  const out = [];
+  if (rng() < table.fitted) { const id = rollModDrop(rng, player, 'fitted'); if (id) out.push({ id, kind: 'fitted' }); }
+  if (table.deploy && rng() < table.deploy) { const id = rollModDrop(rng, player, 'deploy'); if (id) out.push({ id, kind: 'deployable' }); }
+  return out;
+}
+function modSummary(player) {
+  ensureMods(player);
+  const fitted = {};
+  for (const t of TOOL_IDS) { const id = fittedMod(player, t); if (id) fitted[t] = id; }
+  return {
+    owned: Object.keys(MODS_ALL).filter(id => player.modsOwned[id]),
+    fitted,
+    deployOwned: Object.keys(DEPLOY_MODS).filter(id => player.modsOwned[id])
+  };
+}
+
 // ---- Phase 3: XP, levels, weight classes -----------------------------------
 // XP is a progression track ONLY: never spent, never bought, no shop. House
 // fights pay a flat line plus a bonus for teaching new shapes. Pit fights pay
@@ -384,6 +510,16 @@ function effectiveStats(state, player, armorMap, opts) {
       if (m.ignite) entry.ignite = { dps: 1.5, secs: 4 };
       entry.gear = { name: worn.name, tier: worn.tier, unique: worn.unique || null };
     }
+    // FITTED MODS (v1): socketed at the satchel, dealt here like gear — the
+    // referee enforces exactly these numbers and no others.
+    const fm = fittedMod(player, id);
+    if (fm) {
+      entry.mod = { id: fm, name: FITTED_MODS[fm].name, sigil: FITTED_MODS[fm].sigil, color: FITTED_MODS[fm].color };
+      if (fm === 'throughline') { entry.markMs = Math.round((entry.markMs || 4000) * MOD_NUMBERS.markMult); entry.markThroughDecoy = true; }
+      if (fm === 'emberline') entry.modBurn = { dps: MOD_NUMBERS.floodBurnDps, secs: MOD_NUMBERS.floodBurnSecs };
+      if (fm === 'ashenveil') entry.traceShed = (entry.traceShed || 0) + MOD_NUMBERS.whisperShed;
+      if (fm === 'paybackcoil') entry.paybackCoil = true;
+    }
     // THE CAPTOR'S PRIZE: a twinned tool strikes twice for the rest of the run.
     if (opts.twinTool === id) entry.twin = true;
     tools[id] = entry;
@@ -405,8 +541,23 @@ function effectiveStats(state, player, armorMap, opts) {
     abilities[aid] = entry;
   }
   const decoyLong = gear.decoy ? affixValue(gear.decoy, 'longlife') : 0;
+  // The MOD RAIL, dealt: only the deployables this fighter OWNS ride the
+  // fight, each with its charge count. The referee spends from this table —
+  // a log that fires an undealt mod, or fires past its charges, is forged.
+  const modsDeploy = {};
+  if (player && player.modsOwned) {
+    for (const mid of Object.keys(DEPLOY_MODS)) {
+      if (player.modsOwned[mid]) {
+        const d = DEPLOY_MODS[mid];
+        modsDeploy[mid] = { name: d.name, sigil: d.sigil, color: d.color, charges: d.charges, line: d.line };
+      }
+    }
+  }
+  const modsFitted = {};
+  for (const t of TOOL_IDS) { const fid = fittedMod(player, t); if (fid) modsFitted[t] = fid; }
   return {
     tools, abilities,
+    mods: { fitted: modsFitted, deploy: modsDeploy },
     gateHp: opts.gateHp || GATE_HP,
     gateRegen: +(GATE_REGEN * effectiveAggression(state) * (has(player, 'pat2') ? 0.8 : 1)).toFixed(2),
     energyMax: ENERGY_MAX + (has(player, 'spd3') ? 20 : 0),
@@ -438,7 +589,7 @@ function extractPatterns(actions) {
   let decoyUntil = -1;
   // a parry is a reflex, not a shape — an ability is a stance, not a shape —
   // and a rung Stillbell is an item spent, not a shape either
-  const acts = actions.filter(a => a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:'));
+  const acts = actions.filter(a => a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:') && !String(a.tool || '').startsWith('mod:'));
   for (let i = 0; i < acts.length; i++) {
     const a = acts[i];
     if (a.tool === 'decoy') decoyUntil = a.t + 5000;
@@ -606,8 +757,22 @@ function simulateRound(fight, actions, durationMs) {
     // GODFORGED declarations ride the fight the same way: dealt by the
     // server from a real charged treasure, enforced like any other claim.
     mercyUsed: false, dawnUsed: false,
-    dawnReady: !!(fight.god && fight.god.power === 'seconddawn' && !fight.god.dawnUsed)
+    dawnReady: !!(fight.god && fight.god.power === 'seconddawn' && !fight.god.dawnUsed),
+    // MODS v1: the rail's charge purse, the OVERCLOCK arm, the PAYBACK
+    // COIL's coil, and the GHOST PLATE's hidden feed (it discharges into
+    // the first strike thrown after its window closes — never before).
+    modCharges: {}, modsUsed: [], overclockArmed: false,
+    payback: 0, phantomUntil: -1, plateFed: 0, plateUntil: -1
   };
+  const dealtDeploy = (stats.mods && stats.mods.deploy) || {};
+  for (const mid of Object.keys(dealtDeploy)) S.modCharges[mid] = dealtDeploy[mid].charges || 0;
+  // Flat strike bonus waiting in the fighter's hands: the Coil pays out on
+  // the very next strike; the Plate only once its window has closed.
+  function strikeBonus(t) {
+    let b = S.payback || 0; S.payback = 0;
+    if (S.plateFed > 0 && t >= S.plateUntil) { b += S.plateFed; S.plateFed = 0; }
+    return b;
+  }
   let cur = 0;
   function noteMorphCrossing() {
     if (morphCfg && !S.morphed && !S.morphPending && S.gateHp > 0 && S.gateHp <= stats.gateHp * MORPH.trigger) {
@@ -667,6 +832,35 @@ function simulateRound(fight, actions, durationMs) {
       S.bellUntil = t + BELL_FREEZE_MS;
       return null;
     }
+    // ---- the MOD RAIL: dealt in the stats, charged, or the claim is forged ----
+    if (typeof a.tool === 'string' && a.tool.startsWith('mod:')) {
+      const id = a.tool.slice('mod:'.length);
+      if (!dealtDeploy[id]) return 'mod not owned';
+      if (!(S.modCharges[id] > 0)) return 'mod charges spent';
+      S.modCharges[id]--;
+      S.modsUsed.push(id);
+      if (id === 'overclock') { S.overclockArmed = true; return null; }
+      if (id === 'tracepurge') { S.trace = Math.max(0, S.trace - MOD_NUMBERS.purgeAmount); return null; }
+      if (id === 'ghostplate') { S.plateUntil = t + MOD_NUMBERS.plateMs; return null; }
+      if (id === 'coldsnap') {
+        // Freeze the rhythm: the next strike on the dealt schedule lands
+        // late. The event tail re-sorts; a strike pushed past the round's
+        // limit simply never lands — the strongest thing a Snap can do,
+        // and it costs a charge either way. No strike left (a Vault's
+        // silence) means the Snap spends itself on nothing.
+        for (let i = ei; i < events.length; i++) {
+          if (events[i].type !== 'strike') continue;
+          events[i].t += MOD_NUMBERS.coldsnapMs;
+          events[i].s.at += MOD_NUMBERS.coldsnapMs;
+          const tail = events.splice(ei);
+          tail.sort((x, y) => x.t - y.t || (x.type === 'action' ? -1 : 1));
+          for (const e of tail) events.push(e);
+          break;
+        }
+        return null;
+      }
+      return 'unknown mod';
+    }
     // ---- ability pods: dealt in the stats, owned or the claim is forged ----
     if (typeof a.tool === 'string' && a.tool.startsWith('ability:')) {
       const id = a.tool.slice('ability:'.length);
@@ -697,6 +891,8 @@ function simulateRound(fight, actions, durationMs) {
           S.vulnBonus += bonus; dmg += bonus;
           if (!S.combos.includes('open-window')) S.combos.push('open-window');
         }
+        const coilBonus = strikeBonus(t);
+        if (coilBonus) dmg += coilBonus;
         S.gateHp -= dmg;
         S.dmgTotal += dmg;
         if (S.gateHp <= 0) { S.gateHp = 0; S.outcome = { result: 'win', endReason: 'breach', at: t }; }
@@ -737,6 +933,9 @@ function simulateRound(fight, actions, durationMs) {
     S.lastUse[a.tool] = t;
     // RAPID CYCLING: a use made inside the window halves its own cooldown.
     S.lastCd[a.tool] = t <= S.rapidUntil ? tool.cooldown * 0.5 : tool.cooldown;
+    // OVERCLOCK (mod rail): the armed strike resolves hasted — its own
+    // cooldown halves again, and the arm is spent.
+    if (S.overclockArmed) { S.lastCd[a.tool] *= 0.5; S.overclockArmed = false; }
     // The trace hears everything — unless GHOST is walking (3 strikes free).
     let traceAdd = tool.trace || 0;
     if (traceAdd > 0 && S.ghostCharges > 0) { traceAdd = 0; S.ghostCharges--; }
@@ -744,6 +943,14 @@ function simulateRound(fight, actions, durationMs) {
     if (a.tool === 'decoy') {
       S.critNext = stats.decoyCrit;
       S.lastDecoyAt = t;
+      // PAYBACK COIL (fitted): the phantom stands for 5s and drinks blows.
+      if (tool.paybackCoil) S.phantomUntil = t + MOD_NUMBERS.phantomMs;
+      // THROUGHLINE (fitted): the mark goes through the Decoy — a live mark
+      // (or one just faded) is re-threaded at full length instead of lost.
+      if (S.markCharges > 0 && stats.tools.probe && stats.tools.probe.markThroughDecoy &&
+          t <= S.markUntil + 2500) {
+        S.markUntil = t + (stats.tools.probe.markMs || 4000);
+      }
       // Burned defensively during a wind-up, a decoy eats the strike whole.
       const pending = allStrikes.find(s => s.kind === 'haymaker' && !s.parried && !s.eaten &&
         s.at !== undefined && t >= s.at - windupMs && t <= s.at);
@@ -782,6 +989,10 @@ function simulateRound(fight, actions, durationMs) {
       S.vulnBonus += bonus; dmg += bonus;
       if (!S.combos.includes('open-window')) S.combos.push('open-window');
     }
+    // The Coil and the Plate pay out here — flat weight on the strike,
+    // outside every multiplier, exactly as the client mirrors it.
+    const coilBonus = strikeBonus(t);
+    if (coilBonus) dmg += coilBonus;
     S.gateHp -= dmg;
     S.dmgTotal += dmg;
     if (a.tool === 'whisper') {
@@ -789,6 +1000,8 @@ function simulateRound(fight, actions, durationMs) {
       S.dots.push({ until: t + (tool.dotSecs || 0) * 1000, dps });
       // A geared Whisper burns trace off the books as it lands.
       if (tool.traceBurn) S.trace = Math.max(0, S.trace - tool.traceBurn);
+      // ASHEN VEIL (fitted): the strike sheds its trace into the ash.
+      if (tool.traceShed) S.trace = Math.max(0, S.trace - tool.traceShed);
       // COLD TRAIL: a Whisper on a fresh Decoy's heels dumps trace too.
       if (t - S.lastDecoyAt <= COMBO.coldTrailMs) {
         S.trace = Math.max(0, S.trace - COMBO.coldTrailDump);
@@ -798,6 +1011,11 @@ function simulateRound(fight, actions, durationMs) {
     // EMBERBRAND (a LEGENDARY flood's unique power): the strike ignites.
     if (a.tool === 'flood' && tool.ignite) {
       S.dots.push({ until: t + tool.ignite.secs * 1000, dps: tool.ignite.dps });
+    }
+    // EMBERLINE (fitted): the strike lays a slower ember of its own. Like
+    // the ignite, the twinned second strike does not re-lay it.
+    if (a.tool === 'flood' && tool.modBurn) {
+      S.dots.push({ until: t + tool.modBurn.secs * 1000, dps: tool.modBurn.dps });
     }
     // A geared Flood splashes onto a second shape as it lands.
     if (a.tool === 'flood' && tool.splash) { S.gateHp -= tool.splash; S.dmgTotal += tool.splash; }
@@ -842,6 +1060,13 @@ function simulateRound(fight, actions, durationMs) {
     } else {
       S.integrity -= STRIKE.dmg.clean; S.strikesTaken++; S.strikeDamage += STRIKE.dmg.clean;
     }
+    // MODS drink the blow: the GHOST PLATE feeds on any strike inside its
+    // window (half the weight, capped); the PAYBACK COIL feeds on strikes
+    // that land while the phantom stands (a quarter, capped smaller).
+    const blow = s.kind === 'haymaker' ? STRIKE.dmg.haymaker
+      : s.kind === 'glance' ? STRIKE.dmg.glance : STRIKE.dmg.clean;
+    if (t < S.plateUntil) S.plateFed = Math.min(MOD_NUMBERS.plateCap, S.plateFed + blow * MOD_NUMBERS.plateRate);
+    if (S.phantomUntil > 0 && t < S.phantomUntil) S.payback = Math.min(MOD_NUMBERS.paybackCap, S.payback + blow * MOD_NUMBERS.paybackRate);
     if (S.integrity <= 0) {
       // THE SECOND HEART: the first zeroing blow breaks the Heart instead —
       // the fighter stands back up at HEART_RESTORE and the fight goes on.
@@ -896,7 +1121,7 @@ function simulateRound(fight, actions, durationMs) {
     damagePct: Math.max(0, Math.min(100, Math.round((1 - S.gateHp / stats.gateHp) * 100))),
     parries: S.parries, strikesTaken: S.strikesTaken, strikeDamage: S.strikeDamage,
     dmgTotal: +S.dmgTotal.toFixed(2), vulnBonus: +S.vulnBonus.toFixed(2),
-    combos: S.combos, abilitiesUsed: S.abilitiesUsed, parryWhiffs: S.parryWhiffs,
+    combos: S.combos, abilitiesUsed: S.abilitiesUsed, modsUsed: S.modsUsed, parryWhiffs: S.parryWhiffs,
     feintsShown: S.feintsShown, morphed: S.morphed, morphAt: S.morphAt,
     heartUsed: S.heartUsed, bellRung: S.bellRung,
     mercyUsed: S.mercyUsed, dawnUsed: S.dawnUsed
@@ -928,7 +1153,7 @@ function settleFight(state, player, fight, submission) {
 
   // Counter-evolution: the Twin armors against this fighter's favorite tools.
   const toolUse = {};
-  for (const a of actions) if (a.tool !== 'parry' && a.tool !== 'bell' && !String(a.tool || '').startsWith('ability:')) toolUse[a.tool] = (toolUse[a.tool] || 0) + 1;
+  for (const a of actions) if (a.tool !== 'parry' && a.tool !== 'bell' && !String(a.tool || '').startsWith('ability:') && !String(a.tool || '').startsWith('mod:')) toolUse[a.tool] = (toolUse[a.tool] || 0) + 1;
   // Career tallies: a devil's style and guard are built from these.
   player.toolUse = player.toolUse || {};
   for (const [tool, n] of Object.entries(toolUse)) player.toolUse[tool] = (player.toolUse[tool] || 0) + n;
@@ -1052,6 +1277,7 @@ function settlePitFight(state, challenger, owner, fight, submission, sim, rng) {
   challenger.pitAttack.bouts += 1;
   const delta = fight.pitClassDelta || 0;
   let bountyWon = 0, xpGain = 0, points = 0;
+  let modDrop = null;
 
   if (result === 'win') {
     challenger.pitAttack.breaches += 1;
@@ -1082,6 +1308,13 @@ function settlePitFight(state, challenger, owner, fight, submission, sim, rng) {
       if (traits.mirage && traits.classIdx >= 3) rollDrop(challenger, 'stillbell', DROPS.stillbell.trait, drops);
     } else {
       for (const it of Object.keys(DROPS)) rollDrop(challenger, it, DROPS[it].plain, drops);
+    }
+    // MODS v1: a breach occasionally leaves a mod in the hunter's hands —
+    // rolled from the same dealt rng, after the item drops, and granted on
+    // the spot (mods carry no serial and death cannot take them).
+    if (roll() < MOD_DROPS.pitWin) {
+      const mid = rollModDrop(roll, challenger, 'any');
+      if (mid) modDrop = { id: mid, name: MODS_ALL[mid].name, kind: FITTED_MODS[mid] ? 'fitted' : 'deployable', tool: FITTED_MODS[mid] ? FITTED_MODS[mid].tool : null };
     }
   } else {
     devil.held += 1;
@@ -1126,7 +1359,7 @@ function settlePitFight(state, challenger, owner, fight, submission, sim, rng) {
     result, endReason: endReason || (result === 'win' ? 'breach' : 'timeout'),
     secs, points, bountyWon, xp: xpGain, emberBonus,
     level: levelForXp(challenger.xp), levelUp: levelForXp(challenger.xp) > levelBefore,
-    drops, dropBonus,
+    drops, dropBonus, modDrop,
     morphed: !!sim.morphed, feints: sim.feintsShown || 0,
     combos: sim.combos || [],
     shapesTaught: [], shapesTaughtCount: 0, newToWorldCount: 0, armorGains: {},
@@ -1472,7 +1705,7 @@ function teachFromActions(state, player, actions) {
     player.shapes[k] = (player.shapes[k] || 0) + patterns[k] * learnMult;
   }
   const toolUse = {};
-  for (const a of actions || []) if (a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:')) toolUse[a.tool] = (toolUse[a.tool] || 0) + 1;
+  for (const a of actions || []) if (a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:') && !String(a.tool || '').startsWith('mod:')) toolUse[a.tool] = (toolUse[a.tool] || 0) + 1;
   player.toolUse = player.toolUse || {};
   for (const [tool, n] of Object.entries(toolUse)) player.toolUse[tool] = (player.toolUse[tool] || 0) + n;
   const ranked = Object.entries(toolUse).sort((a, b) => b[1] - a[1]);
@@ -1576,6 +1809,8 @@ module.exports = {
   has, familiarity, familiarityParts, effectiveStats, extractPatterns, validateLog,
   makeStrikes, simulateRound, rng32,
   settleFight, settlePitFight, educationMeter, fmtTime,
+  FITTED_MODS, DEPLOY_MODS, MODS_ALL, MOD_NUMBERS, MOD_DROPS,
+  ensureMods, fittedMod, grantMod, fitMod, rollModDrop, rollDescentMods, modSummary,
   GEAR_SLOTS, GEAR_TIERS, TIER_AFFIXES, HAUL_VALUES, AFFIX_POOLS, GEAR_UNIQUES,
   affixValue, gearMods, wornGearMap, gearSummary, gearLine,
   rollGearPiece, rollTier, DROP_TABLES, bossLegendaryChance, haulValue,

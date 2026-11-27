@@ -204,6 +204,10 @@
         tone({ f0: f, dur: 0.2, type: 'triangle', gain: 0.20, at: i * 0.07 });
       });
     },
+    modfire: function () { // MODS v1 — a heavy socket clunks home, then a spark
+      tone({ f0: 180, f1: 90, dur: 0.07, type: 'square', gain: 0.2 });
+      tone({ f0: 1500, f1: 2400, dur: 0.06, type: 'sawtooth', gain: 0.07, at: 0.05 });
+    },
     rapid: function () { // cycling up — quickening ticks
       for (var i = 0; i < 6; i++) {
         tone({ f0: 700 + i * 130, dur: 0.045, type: 'square', gain: 0.13, at: i * (0.09 - i * 0.008) });

@@ -13,6 +13,7 @@
   var verdictEl = document.getElementById('verdict');
   var kitEl = document.getElementById('kit');
   var abilitiesEl = document.getElementById('abilities');
+  var modrailEl = document.getElementById('modrail');
   var twinreadEl = document.getElementById('twinread');
   var winframeEl = document.getElementById('winframe');
   var winframeBar = document.getElementById('winframe-bar');
@@ -112,8 +113,13 @@
       seized: st.seized || null, seizeShown: false,
       twinTool: dd.twinTool || null,
       god: dd.god || null, mercyUsed: !!(dd.god && dd.god.mercyUsed), dawnUsed: !!(dd.god && dd.god.dawnUsed),
-      vaultShapes: 14
+      vaultShapes: 14,
+      // MODS v1 — the rail's purse and the hidden feeds, mirroring the referee
+      modCharges: {}, overclockArmed: false,
+      payback: 0, paybackPhantomUntil: 0, plateFed: 0, plateUntil: 0
     };
+    var dep0 = (st.mods && st.mods.deploy) || {};
+    for (var mid0 in dep0) S.modCharges[mid0] = dep0[mid0].charges || 0;
     for (var id in st.tools) S.famShown[id] = st.tools[id].familiarity;
     stageMsg.classList.add('hidden');
     verdictEl.classList.add('hidden');
@@ -121,6 +127,7 @@
     parryBtn.disabled = false;
     buildKit(st);
     buildAbilities(st);
+    buildModRail(st);
     updateTwinRead();
     updateRunLine();
     clockEl.textContent = fmtClock(S.left);
@@ -183,6 +190,26 @@
     updateRunLine();
   }
 
+  // MODS v1: a mod that falls in the deep is banked the moment it lands —
+  // it never rides the haul and death cannot take it. Beams, not baggage.
+  function showModLoot(mods) {
+    if (!mods || !mods.length) return;
+    mods.forEach(function (m, i) {
+      if (lootlayerEl) {
+        var beam = document.createElement('div');
+        beam.className = 'beam t-mod';
+        beam.style.left = (30 + i * 22) + '%';
+        beam.style.setProperty('--bc', m.kind === 'fitted' ? '#00e5ff' : '#b967ff');
+        beam.innerHTML = '<i></i><span>' + esc(m.name) + '<br><b>' + (m.kind === 'fitted' ? 'FITTED MOD — BANKED' : 'RAIL MOD — BANKED') + '</b></span>';
+        lootlayerEl.appendChild(beam);
+        setTimeout(function () { beam.classList.add('fade'); }, 2900);
+        setTimeout(function () { beam.remove(); }, 3600);
+      }
+      floatText('MOD BANKED — ' + m.name, '#b967ff', true);
+      sfx('lootEpic');
+    });
+  }
+
   // ---------- the command deck (mirrors the arena's, referee-true) ----------
   function buildKit(st) {
     kitEl.innerHTML = '';
@@ -199,6 +226,7 @@
         '<span class="tcost">' + t.cost + ' energy · ' + (t.cooldown / 1000).toFixed(1) + 's</span>' +
         '<span class="ttrace" style="color:' + (t.trace > 0 ? '#ff2a6d' : '#5dffa0') + '">' + traceTxt + '</span>' +
         (t.gear ? '<span class="tgear">⚜ ' + esc(t.gear.name) + ' (' + t.gear.tier + ')</span>' : '') +
+        (t.mod ? '<span class="tmod" style="--mc:' + t.mod.color + '">' + t.mod.sigil + ' ' + esc(t.mod.name) + ' — SOCKETED</span>' : '') +
         '<span class="tfam">Twin familiarity <b data-fam>' + Math.round(t.familiarity * 100) + '%</b></span>' +
         '<span class="noenergy hidden">not enough energy</span>' +
         '<span class="cdveil"></span>';
@@ -321,6 +349,59 @@
     var b = document.getElementById('ability-mercy');
     if (b) { b.disabled = true; b.classList.add('spent'); }
   }
+  // ---------- MODS v1: the rail under the pods (mirrors the arena) ----------
+  function buildModRail(st) {
+    if (!modrailEl) return;
+    modrailEl.innerHTML = '';
+    var dep = (st.mods && st.mods.deploy) || {};
+    Object.keys(dep).forEach(function (id) {
+      var m = dep[id];
+      var b = document.createElement('button');
+      b.className = 'tool mod'; b.id = 'mod-' + id;
+      b.style.setProperty('--mc', m.color);
+      var pips = '';
+      for (var i = 0; i < (m.charges || 0); i++) pips += '<span class="pip full"></span>';
+      b.innerHTML = '<span class="tname" style="color:' + m.color + '">' + m.sigil + ' ' + m.name + '</span>' +
+        '<span class="tdmg">' + (id === 'overclock' ? 'next strike hasted' : id === 'tracepurge' ? 'trace −35% now' :
+          id === 'ghostplate' ? 'blows feed a hidden plate · 8s' : 'the Twin’s next strike lands late') + '</span>' +
+        '<span class="pips">' + pips + '</span>';
+      b.title = m.line;
+      b.addEventListener('click', function () { fireMod(id); });
+      modrailEl.appendChild(b);
+    });
+  }
+  function strikeBonusClient(now) {
+    var b = S.payback || 0; S.payback = 0;
+    if (S.plateFed > 0 && now >= S.plateUntil) { b += S.plateFed; S.plateFed = 0; floatText('THE GHOST PLATE DISCHARGES +' + Math.round(b), '#b967ff', true); }
+    return b;
+  }
+  function fireMod(id) {
+    if (!S || S.over) return;
+    var dep = (S.stats.mods && S.stats.mods.deploy) || {};
+    if (!dep[id]) return;
+    if (!(S.modCharges[id] > 0)) { sfx('deny'); return; }
+    var now = elapsed();
+    S.modCharges[id]--;
+    S.actions.push({ t: Math.round(now), tool: 'mod:' + id });
+    if (id === 'overclock') {
+      S.overclockArmed = true;
+      floatText('OVERCLOCK — THE NEXT STRIKE RESOLVES HASTED', '#00e5ff', true);
+    } else if (id === 'tracepurge') {
+      S.trace = Math.max(0, S.trace - 35);
+      floatText('TRACE PURGE −35%', '#5dffa0', true);
+    } else if (id === 'ghostplate') {
+      S.plateUntil = now + 8000;
+      floatText('GHOST PLATE — ARMED', '#b967ff', true);
+    } else if (id === 'coldsnap') {
+      for (var i = 0; i < S.strikes.length; i++) {
+        var s = S.strikes[i];
+        if (!s.done) { s.at += 1200; floatText('COLD SNAP — ITS RHYTHM FREEZES', '#7df9ff', true); break; }
+      }
+      S.strikes.sort(function (a, b) { return a.at - b.at; });
+    }
+    sfx('modfire');
+    updateHud();
+  }
   function useAbility(id) {
     if (!S || S.over) return;
     var now = elapsed();
@@ -352,10 +433,11 @@
       var crit = 1;
       if (S.critNext > 0) { crit *= (1 + S.critNext); S.critNext = 0; S.phantomUntil = 0; }
       if (now >= S.vulnFrom && now <= S.vulnUntil) { crit *= S.combat.vulnMult; floatText('VULNERABLE ×' + S.combat.vulnMult, '#fcee0a', true); }
+      var odBonus = strikeBonusClient(now);
       S.beam = { until: performance.now() + 240, color: a.color };
-      hitFx(dmg * crit, a.color, 60);
+      hitFx(dmg * crit + odBonus, a.color, 60);
       S.shake = Math.min(18, S.shake + 12);
-      floatText('OVERDRIVE ' + Math.round(dmg * crit), '#ff2a6d', true);
+      floatText('OVERDRIVE ' + Math.round(dmg * crit + odBonus), '#ff2a6d', true);
       sfx('overdrive');
     }
     updateKit();
@@ -452,6 +534,9 @@
     sfx('hitPlayer');
   }
   function hurt(dmg, label, big) {
+    var hnow = elapsed();
+    if (hnow < S.plateUntil) S.plateFed = Math.min(20, S.plateFed + dmg * 0.5);
+    if (S.paybackPhantomUntil > 0 && hnow < S.paybackPhantomUntil) S.payback = Math.min(12, S.payback + dmg * 0.25);
     S.integrity = Math.max(0, S.integrity - dmg);
     S.hurt = Math.min(1, S.hurt + (big ? 0.85 : 0.45));
     S.shake = Math.min(18, S.shake + (big ? 13 : 6));
@@ -483,6 +568,7 @@
     if (S.energy < t.cost) { sfx('deny'); return; }
     S.energy -= t.cost;
     S.cds[id] = now + (now <= S.rapidUntil ? t.cooldown * 0.5 : t.cooldown);
+    if (S.overclockArmed) { S.cds[id] = now + (S.cds[id] - now) * 0.5; S.overclockArmed = false; }
     S.lastUse[id] = now;
     S.actions.push({ t: Math.round(now), tool: id });
     S.uses[id] = (S.uses[id] || 0) + 1;
@@ -500,12 +586,16 @@
 
     if (id === 'decoy') {
       S.lastDecoyAt = now;
+      if (t.paybackCoil) S.paybackPhantomUntil = now + 5000;
+      var pt = S.stats.tools.probe;
+      if (pt && pt.markThroughDecoy && S.markCharges > 0 && now <= S.markUntil + 2500) S.markUntil = now + (pt.markMs || 4000);
       var s = windingHaymaker(now);
       if (s) { s.eaten = true; floatText('DECOY UP — IT SWINGS AT THE GHOST', '#fcee0a', false); }
     }
 
     var dmg = (S.morphed && t.dmgMorph !== undefined) ? t.dmgMorph : t.dmg;
     var crit = 1;
+    var modBonus = id !== 'decoy' ? strikeBonusClient(now) : 0;
     if (id !== 'decoy') {
       if (S.critNext > 0) { crit *= (1 + S.critNext); S.critNext = 0; S.phantomUntil = 0; }
       if (id === 'flood' && now - S.lastProbeAt <= 3000) {
@@ -523,20 +613,22 @@
       S.markCharges = t.twoEyes ? 2 : 1;
       S.lastProbeAt = now;
       S.beam = { until: performance.now() + 140, color: t.color };
-      hitFx(dmg * crit, t.color, 10);
+      hitFx(dmg * crit + modBonus, t.color, 10);
       sfx('probe');
     } else if (id === 'flood') {
       S.beam = { until: performance.now() + 200, color: t.color };
-      hitFx(dmg * crit, t.color, 46);
+      hitFx(dmg * crit + modBonus, t.color, 46);
       if (t.splash && !S.over) hitFx(t.splash, t.color, 6);
       if (t.ignite) S.dots.push({ until: now + t.ignite.secs * 1000, dps: t.ignite.dps });
+      if (t.modBurn) S.dots.push({ until: now + t.modBurn.secs * 1000, dps: t.modBurn.dps });
       S.shake = Math.min(16, S.shake + 9);
       sfx('flood');
     } else if (id === 'whisper') {
       var dps = (S.morphed && t.dotMorph !== undefined) ? t.dotMorph : t.dot;
       S.dots.push({ until: now + t.dotSecs * 1000, dps: dps });
       if (t.traceBurn) S.trace = Math.max(0, S.trace - t.traceBurn);
-      hitFx(dmg * crit, t.color, 14);
+      if (t.traceShed) S.trace = Math.max(0, S.trace - t.traceShed);
+      hitFx(dmg * crit + modBonus, t.color, 14);
       sfx('whisper');
       if (now - S.lastDecoyAt <= 5000) {
         S.trace = Math.max(0, S.trace - 12);
@@ -676,6 +768,18 @@
         var span = Math.max(1, S.vulnUntil - S.vulnFrom);
         winframeBar.style.width = Math.round(Math.max(0, (S.vulnUntil - nowH) / span) * 100) + '%';
       }
+    }
+    if (modrailEl && S.stats.mods && S.stats.mods.deploy) {
+      Object.keys(S.stats.mods.deploy).forEach(function (id) {
+        var b = document.getElementById('mod-' + id);
+        if (!b) return;
+        var left = S.modCharges[id] || 0;
+        b.disabled = left <= 0 || S.over;
+        b.classList.toggle('spent', left <= 0);
+        b.classList.toggle('armed', (id === 'overclock' && S.overclockArmed) || (id === 'ghostplate' && elapsed() < S.plateUntil));
+        var pips = b.querySelectorAll('.pip');
+        for (var i = 0; i < pips.length; i++) pips[i].classList.toggle('full', i < left);
+      });
     }
     if (abilitiesEl && S.stats.abilities) {
       Object.keys(S.stats.abilities).forEach(function (id) {
@@ -994,6 +1098,7 @@
       floatText('THE BOSS FALLS — YOUR HAUL BANKS ON THE SPOT', '#ffd166', true);
     }
     if (dd.drops && dd.drops.length) showLoot(dd.drops);
+    if (dd.mods && dd.mods.length) showModLoot(dd.mods);
     if (dd.captor === 'twinned') {
       floatText('⚔ WON BACK — TWINNED FOR THE REST OF THE RUN', '#ffd166', true);
       sfx('twin');

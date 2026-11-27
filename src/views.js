@@ -99,12 +99,15 @@ function armoryHtml(p) {
   const stands = game.GEAR_SLOTS.map(slot => {
     const g = worn[slot];
     const label = slot === 'body' ? 'Body relic' : TOOLS[slot].name;
+    // MODS v1: the socketed mod rides the stand, sigil and all.
+    const fm = slot !== 'body' ? game.fittedMod(p, slot) : null;
+    const modChip = fm ? `<span class="stand-mod" style="--mc:${game.FITTED_MODS[fm].color}">${game.FITTED_MODS[fm].sigil} ${esc(game.FITTED_MODS[fm].name)} socketed</span>` : '';
     if (!g) {
-      return `<div class="stand bare"><span class="stand-icon">${toolIcon(slot)}</span><span class="stand-slot">${label}</span><strong class="stand-name dim">BARE</strong><span class="stand-affixes dim">nothing worn — the depths provide</span></div>`;
+      return `<div class="stand bare"><span class="stand-icon">${toolIcon(slot)}</span><span class="stand-slot">${label}</span><strong class="stand-name dim">BARE</strong><span class="stand-affixes dim">nothing worn — the depths provide</span>${modChip}</div>`;
     }
     const tier = String(g.tier || 'STURDY').toUpperCase();
     const affixes = game.gearLine(g).map(esc).join(' · ');
-    return `<div class="stand r-${tier.toLowerCase()}"><span class="stand-icon">${toolIcon(slot)}</span><span class="stand-slot">${label}</span><strong class="stand-name">${esc(g.name)}</strong><span class="tierbadge t-${tier.toLowerCase()}">${tier}${g.serial ? ' No. ' + g.serial : ''}</span>${affixes ? `<span class="stand-affixes">${affixes}</span>` : ''}</div>`;
+    return `<div class="stand r-${tier.toLowerCase()}"><span class="stand-icon">${toolIcon(slot)}</span><span class="stand-slot">${label}</span><strong class="stand-name">${esc(g.name)}</strong><span class="tierbadge t-${tier.toLowerCase()}">${tier}${g.serial ? ' No. ' + g.serial : ''}</span>${affixes ? `<span class="stand-affixes">${affixes}</span>` : ''}${modChip}</div>`;
   }).join('');
   const stock = p.itemStock || {};
   const shelf = [];
@@ -125,6 +128,9 @@ function armoryHtml(p) {
   const wornNames = game.GEAR_SLOTS.filter(s => worn[s]).map(s => worn[s].name);
   const lineBits = [];
   lineBits.push(wornNames.length ? 'Build: ' + wornNames.join(' · ') : 'Build: bare tools, no gear worn');
+  const modSum = game.modSummary(p);
+  if (Object.keys(modSum.fitted).length) lineBits.push(Object.keys(modSum.fitted).length + ' mod' + (Object.keys(modSum.fitted).length === 1 ? '' : 's') + ' socketed');
+  if (modSum.deployOwned.length) lineBits.push(modSum.deployOwned.length + ' rail mod' + (modSum.deployOwned.length === 1 ? '' : 's') + ' owned');
   if (shelf.length) lineBits.push(shelf.length + ' treasure' + (shelf.length === 1 ? '' : 's') + ' shelved');
   if (abilities) lineBits.push(Object.keys(game.ABILITIES).filter(aid => p.nodes && p.nodes[game.ABILITIES[aid].node]).length + ' abilities lit');
   return `<div class="armory" data-armory>
@@ -315,6 +321,7 @@ function arenaPage(state, me, challenge, pit) {
     <button id="parrybtn" class="parrybtn" type="button" disabled><span class="parry-charge" id="parry-charge"></span>⚡ PARRY<span>tap when it winds up — or tap the optic, or hit SPACE</span></button>
     <div class="kit" id="kit"></div>
     <div class="kit abilities" id="abilities"></div>
+    <div class="kit modrail" id="modrail"></div>
     <div class="combos-legend">
       <span><strong>MARK &amp; DROWN</strong> — Probe, then Flood within 3s: +50%</span>
       <span><strong>COLD TRAIL</strong> — Whisper on a fresh Decoy: dumps trace</span>
@@ -369,6 +376,7 @@ function devilCardHtml(state, owner, me, opts) {
     ${owner.taunt ? `<p class="taunt">“${esc(owner.taunt)}”</p>` : ''}
     ${game.founderSerial(owner) ? `<p class="embermark">🔥 Founder's Ember No. ${game.founderSerial(owner)} — one of the first hundred. Its holder earns +10% XP; the mark is the honor.</p>` : ''}
     ${(() => { const worn = game.wornGearMap(owner); const list = game.GEAR_SLOTS.filter(s => worn[s]).map(s => worn[s]); return list.length ? `<p class="pit-gear">Wearing: ${list.map(gp => `<span class="tierbadge t-${gp.tier.toLowerCase()}">${esc(gp.name)} · ${gp.slot === 'body' ? 'Body' : TOOLS[gp.slot].name} (${gp.tier})</span>`).join(' ')}</p>` : ''; })()}
+    ${(() => { const fm = game.modSummary(owner).fitted; const ids = Object.keys(fm); return ids.length ? `<p class="pit-gear">Socketed: ${ids.map(t => `<span class="tierbadge" style="border-color:${game.FITTED_MODS[fm[t]].color};color:${game.FITTED_MODS[fm[t]].color}">${game.FITTED_MODS[fm[t]].sigil} ${esc(game.FITTED_MODS[fm[t]].name)} \u00b7 ${TOOLS[t].name}</span>`).join(' ')}</p>` : ''; })()}
     <p class="pit-stats">Held <strong>${devil.held}</strong> · breached <strong>${devil.breached}</strong>${devil.lastBreachedBy ? ` · last breached by ${esc(devil.lastBreachedBy)}` : ''}<br>
     <span class="dim">Knows ${shapesKnown} challenger shapes · owner's web: ${nodesOwned} evolutions · ${esc(armorLine)}</span></p>
     <div class="pit-gate">${gate}</div>
@@ -495,6 +503,25 @@ function profilePage(state, p, opts) {
         ${unworn.length ? `<h3 class="boardh">In the satchel, unworn</h3><ul class="items">${unwornRows}</ul>` : '<p class="dim">No unworn gear on the shelf. What the depths drop, you keep — <a href="/descent">delve</a> to fill it.</p>'}
         ${godRows ? `<h3 class="boardh">GODFORGED treasures</h3><ul class="items">${godRows}</ul>` : ''}
         <p class="dim">Gear swaps happen here, between runs — never mid-delve. Your worn gear is your build: it rides your house fights and your Pit devil too, and your devil's card shows it. The Mirror Wrap and the Anchor Stitch are Pit treasures — they do not ride the Descent. Second Hearts and Stillbells are declared at the Descent's door.</p>`;
+  // MODS v1: the socket board and the rail shelf. Socketing lives here,
+  // between fights, under the same law as the gear shelf.
+  const modSum = game.modSummary(p);
+  const fittedRows = game.TOOL_IDS.map(t => {
+    const fid = modSum.fitted[t];
+    if (!fid) return `<div class="gear-row"><span class="gear-slot">${TOOLS[t].name} socket</span> <span class="dim">empty — the depths provide</span></div>`;
+    const d = game.FITTED_MODS[fid];
+    return `<div class="gear-row"><span class="gear-slot">${TOOLS[t].name} socket</span> <span class="modchip" style="--mc:${d.color}">${d.sigil} ${esc(d.name)}</span> <form method="post" action="/api/mods/fit" class="inlineform"><input type="hidden" name="tool" value="${t}"><input type="hidden" name="mod" value=""><button class="ghostbtn" type="submit">Unsocket</button></form></div>`;
+  }).join('');
+  const unfitRows = Object.keys(game.FITTED_MODS).filter(mid => p.modsOwned && p.modsOwned[mid] && modSum.fitted[game.FITTED_MODS[mid].tool] !== mid)
+    .map(mid => { const d = game.FITTED_MODS[mid]; return `<li class="gearline"><span class="modchip" style="--mc:${d.color}">${d.sigil} <strong>${esc(d.name)}</strong></span> <span class="dim">${esc(d.line)}</span> <form method="post" action="/api/mods/fit" class="inlineform"><input type="hidden" name="tool" value="${d.tool}"><input type="hidden" name="mod" value="${mid}"><button class="ghostbtn" type="submit">Socket onto the ${TOOLS[d.tool].name}</button></form></li>`; }).join('');
+  const deployRows = Object.keys(game.DEPLOY_MODS).filter(mid => p.modsOwned && p.modsOwned[mid])
+    .map(mid => { const d = game.DEPLOY_MODS[mid]; return `<li class="gearline"><span class="modchip" style="--mc:${d.color}">${d.sigil} <strong>${esc(d.name)}</strong></span> <span class="dim">${esc(d.line)}</span> <span class="dim">· ${d.charges} charges a fight, refilled between fights</span></li>`; }).join('');
+  const modsSection = `
+        <h2 class="mt" id="mods">Mods — sockets and the rail</h2>
+        <p class="dim">Mods are unnumbered and permanent: the depths and the Pit hand them out, and what you own, you keep. Fitted mods socket onto one tool each and change its math in every fight — your devil fights with them too. Rail mods are fired by hand, mid-fight, from the MOD RAIL under your tools; a devil never fires one. Socketing happens here, between runs — never mid-delve.</p>
+        ${fittedRows}
+        ${unfitRows ? `<h3 class="boardh">Owned, unsocketed</h3><ul class="items">${unfitRows}</ul>` : ''}
+        ${deployRows ? `<h3 class="boardh">On your rail</h3><ul class="items">${deployRows}</ul>` : '<p class="dim">No rail mods yet. The deep bosses and the Vaults carry them; a Pit breach sometimes leaves one behind.</p>'}`;
   const body = `
   <section class="profile">
     <div class="p-head">
@@ -527,6 +554,7 @@ function profilePage(state, p, opts) {
         </form>
         ${inventory}
         ${gearShelf}
+        ${modsSection}
       </div>
       <div class="panel">
         <h2>Your devil — standing in <a href="/pit">the Pit</a></h2>
@@ -792,6 +820,7 @@ function descentPage(state, me) {
     <button id="parrybtn" class="parrybtn" type="button" disabled><span class="parry-charge" id="parry-charge"></span>⚡ PARRY<span>tap when it winds up — or tap the optic, or hit SPACE</span></button>
     <div class="kit" id="kit"></div>
     <div class="kit abilities" id="abilities"></div>
+    <div class="kit modrail" id="modrail"></div>
     <div class="haulfeed panel"><h2>Carried haul — unbanked until you ascend or a boss falls</h2><ul id="haulfeed"><li class="dim">Empty hands. The depths provide.</li></ul>
     <p><button id="abandonbtn" class="ghostbtn hidden" type="button">Abandon the run — ascend with what you carry</button></p></div>
     ${boards}

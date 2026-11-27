@@ -104,7 +104,9 @@ function newPlayer(displayName) {
     itemStock: { mirrorwrap: [], anchorstitch: [] }, itemHistory: [],
     pitAttempts: {}, defenseXpDay: { day: game.dayKey(Date.now()), count: 0 },
     // THE DESCENT: the satchel's gear shelf + the delve record
-    gear: [], descent: { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 }
+    gear: [], descent: { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 },
+    // MODS v1: owned mods (unnumbered, permanent) + the fitted sockets
+    modsOwned: {}, modsFitted: { probe: null, flood: null, whisper: null, decoy: null }
   };
   state.players[p.id] = p;
   return p;
@@ -133,6 +135,7 @@ function ensurePlayer(p) {
   if (!p.defenseXpDay) p.defenseXpDay = { day: game.dayKey(Date.now()), count: 0 };
   if (!p.gear) p.gear = [];
   if (!p.descent) p.descent = { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 };
+  game.ensureMods(p);
   return p;
 }
 // Item counts as a plain object, for the surfaces that just need numbers.
@@ -385,10 +388,12 @@ function finishDescentDepth(res, me, fight, sim, problem, actions, claimedDurati
   if (kind === 'vault' && !died) { cleared = true; turned = false; } // the Vault's timer IS its ending
   // ---- drops, rolled from the run seed ^ the depth — the dealt truth
   const drops = [];
+  let vaultCracks = 0;
   const drng = game.rng32((run.seed ^ Math.imul(depth, 40503)) >>> 0);
   if (kind === 'vault') {
     const shapeCount = 14;
     const cracks = Math.round((sim.damagePct / 100) * shapeCount);
+    vaultCracks = cracks;
     run.score += cracks * 15;
     for (let i = 0; i < cracks; i++) {
       if (drng() < 0.30) {
@@ -419,6 +424,15 @@ function finishDescentDepth(res, me, fight, sim, problem, actions, claimedDurati
       const piece = game.rollGearPiece(state, drng, { tier: game.rollTier(drng, game.DROP_TABLES[kind === 'elite' ? 'elite' : 'shape']) });
       run.haul.push(piece); drops.push(piece);
     }
+  }
+  // MODS v1: rolled AFTER the gear from the same seeded rng (the gear books
+  // never shift), and granted on the spot — mods ride no haul, are banked
+  // the moment they fall, and death in the dark cannot take them.
+  const modDrops = [];
+  if (kind === 'vault') {
+    if (vaultCracks > 0) modDrops.push(...game.rollDescentMods(drng, me, 'vault'));
+  } else if (cleared) {
+    modDrops.push(...game.rollDescentMods(drng, me, kind));
   }
   // THE DOUBLE HARVEST (GODFORGED): the first depth of the run that drops
   // loot drops it twice over — every piece rolled is rolled again, same tier.
@@ -460,6 +474,10 @@ function finishDescentDepth(res, me, fight, sim, problem, actions, claimedDurati
   }
   const depthReport = {
     depth, kind, cleared, died, drops: dropSummaries(drops),
+    mods: modDrops.map(md => ({
+      id: md.id, kind: md.kind, name: game.MODS_ALL[md.id].name,
+      tool: game.FITTED_MODS[md.id] ? game.FITTED_MODS[md.id].tool : null
+    })),
     bankedNow: dropSummaries(bankedNow), captor,
     score: run.score, haulCount: run.haul.length,
     integrity: run.integrity, trace: run.trace, twinTool: run.twinTool
@@ -672,6 +690,7 @@ async function route(req, res) {
       xp: me.xp || 0, level: cls.level, className: cls.name, classIdx: cls.idx,
       items: itemCounts(me), itemStock: me.itemStock || { mirrorwrap: [], anchorstitch: [] },
       gear: me.gear || [], wornGear: game.gearSummary(game.wornGearMap(me)),
+      mods: game.modSummary(me),
       descent: me.descent || { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 },
       pitAttack: me.pitAttack || { bouts: 0, breaches: 0 },
       devil: me.devil ? { held: me.devil.held, breached: me.devil.breached, bounty: game.bountyNow(me, Date.now()) } : null
@@ -904,7 +923,7 @@ async function route(req, res) {
       integrityLeft: sim.integrityLeft, tracePeak: sim.tracePeak,
       parries: sim.parries, strikesTaken: sim.strikesTaken,
       vulnBonus: sim.vulnBonus, damageDealt: sim.dmgTotal,
-      combos: sim.combos, abilitiesUsed: sim.abilitiesUsed,
+      combos: sim.combos, abilitiesUsed: sim.abilitiesUsed, modsUsed: sim.modsUsed,
       parryWhiffs: sim.parryWhiffs, morphed: sim.morphed
     };
     // Declared gear settles honestly: a Heart that never broke and a Bell
@@ -1030,6 +1049,24 @@ async function route(req, res) {
     return redirect(res, '/profile#satchel');
   }
 
+  // ---- MODS v1: socketing happens at the satchel, between runs — the same
+  // law as gear. A JSON body gets a JSON answer; the profile's forms get the
+  // redirect they expect. Mid-delve, the sockets are closed like the shelf.
+  if (method === 'POST' && p === '/api/mods/fit') {
+    const isJson = (req.headers['content-type'] || '').includes('json');
+    if (!me.email) return isJson ? sendJson(res, { error: 'members-only' }, 403) : redirect(res, '/signup');
+    const f = isJson ? await bodyJson(req).catch(() => ({})) : await bodyForm(req);
+    for (const r of activeRuns.values()) {
+      if (r.playerId === me.id) return isJson
+        ? sendJson(res, { error: 'run-active', message: 'Sockets are closed while you are down in the Descent.' }, 409)
+        : redirect(res, '/descent?gear=run');
+    }
+    const err = game.fitMod(me, String(f.tool || ''), f.mod ? String(f.mod) : null);
+    if (err) return isJson ? sendJson(res, { error: err }, 400) : redirect(res, '/profile?mods=bad');
+    store.save(true);
+    return isJson ? sendJson(res, { ok: true, mods: game.modSummary(me) }) : redirect(res, '/profile#mods');
+  }
+
   // ---- deck
   if (method === 'POST' && p === '/api/deck/config') {
     const f = await bodyForm(req);
@@ -1150,6 +1187,7 @@ async function route(req, res) {
         createdAt: x.createdAt || null, xp: x.xp || 0, level: game.levelForXp(x.xp || 0),
         points: x.points || 0, bouts: x.record ? x.record.bouts : 0, breaches: x.record ? x.record.breaches : 0,
         items: itemCounts(x),
+        mods: game.modSummary(x),
         gear: (x.gear || []).map(g => ({
           id: g.id, slot: g.slot, tier: g.tier, name: g.name, worn: !!g.worn, banked: !!g.banked,
           unique: g.unique || null, serial: g.serial || null,
@@ -1195,6 +1233,33 @@ async function route(req, res) {
       grantedTo: { id: target.id, email: target.email, name: target.displayName },
       granted: rolled.map(g => ({ id: g.id, slot: g.slot, tier: g.tier, name: g.name, worn: !!g.worn, affixes: (g.affixes || []).map(a => a.label) })),
       gearNow: (target.gear || []).map(g => ({ id: g.id, slot: g.slot, tier: g.tier, name: g.name, worn: !!g.worn, affixes: (g.affixes || []).map(a => a.label) }))
+    });
+  }
+
+  // SUPER DECK — GRANT MODS (ADMIN_KEY only): the Keeper hands a fighter
+  // mods — unnumbered, permanent v1 items, granted through the same books
+  // as the drops grant them (grantMod). No discipline is relaxed here:
+  // mods carry no serials to protect, and nothing numbered (items, gear
+  // editions, GODFORGED) is reachable from this route either.
+  if (method === 'POST' && p === '/api/deck/grant-mods') {
+    const f = await bodyJson(req).catch(() => ({}));
+    if (String(f.key || '') !== ADMIN_KEY) return sendJson(res, { error: 'wrong key' }, 403);
+    const target = state.players[String(f.playerId || '')];
+    if (!target || !target.email) return sendJson(res, { error: 'no such member fighter' }, 404);
+    ensurePlayer(target);
+    const want = Array.isArray(f.mods) && f.mods.length ? f.mods.map(String) : Object.keys(game.MODS_ALL);
+    for (const mid of want) if (!game.MODS_ALL[mid]) return sendJson(res, { error: 'unknown mod: ' + mid }, 400);
+    const granted = [];
+    for (const mid of want) if (game.grantMod(target, mid)) granted.push(mid);
+    // Fit the fitted family when asked, so the fighter steps in loaded.
+    if (f.fit) for (const mid of Object.keys(game.FITTED_MODS)) {
+      if (target.modsOwned[mid]) game.fitMod(target, game.FITTED_MODS[mid].tool, mid);
+    }
+    store.save(true);
+    return sendJson(res, {
+      grantedTo: { id: target.id, email: target.email, name: target.displayName },
+      granted,
+      modsNow: game.modSummary(target)
     });
   }
 

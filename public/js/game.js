@@ -14,6 +14,7 @@
   var verdictEl = document.getElementById('verdict');
   var kitEl = document.getElementById('kit');
   var abilitiesEl = document.getElementById('abilities');
+  var modrailEl = document.getElementById('modrail');
   var twinreadEl = document.getElementById('twinread');
   var winframeEl = document.getElementById('winframe');
   var winframeBar = document.getElementById('winframe-bar');
@@ -104,14 +105,20 @@
       abilityCds: {}, ghostCharges: 0, rapidUntil: 0, secondWindUsed: false,
       lastProbeAt: -1e9, lastDecoyAt: -1e9, windowCalled: false,
       heart: !!(d.gear && d.gear.heart), heartUsed: false,
-      bellDeclared: !!(d.gear && d.gear.bell), bellRung: false, bellUntil: 0
+      bellDeclared: !!(d.gear && d.gear.bell), bellRung: false, bellUntil: 0,
+      // MODS v1 — the rail's purse and the hidden feeds, mirroring the referee
+      modCharges: {}, overclockArmed: false,
+      payback: 0, paybackPhantomUntil: 0, plateFed: 0, plateUntil: 0
     };
+    var dep = (st.mods && st.mods.deploy) || {};
+    for (var mid in dep) S.modCharges[mid] = dep[mid].charges || 0;
     for (var id in st.tools) S.famShown[id] = st.tools[id].familiarity;
     stageMsg.classList.add('hidden');
     verdictEl.classList.add('hidden');
     parryBtn.disabled = false;
     buildKit(st);
     buildAbilities(st);
+    buildModRail(st);
     updateTwinRead();
     clockEl.textContent = fmtClock(S.left);
     sfx('begin');
@@ -133,6 +140,7 @@
         '<span class="tcost">' + t.cost + ' energy · ' + (t.cooldown / 1000).toFixed(1) + 's</span>' +
         '<span class="ttrace" style="color:' + (t.trace > 0 ? '#ff2a6d' : '#5dffa0') + '">' + traceTxt + '</span>' +
         (t.gear ? '<span class="tgear">⚜ ' + escHtml(t.gear.name) + ' (' + escHtml(t.gear.tier) + ')</span>' : '') +
+        (t.mod ? '<span class="tmod" style="--mc:' + t.mod.color + '">' + t.mod.sigil + ' ' + escHtml(t.mod.name) + ' — SOCKETED</span>' : '') +
         '<span class="tfam">Twin familiarity <b data-fam>' + Math.round(t.familiarity * 100) + '%</b></span>' +
         '<span class="noenergy hidden">not enough energy</span>' +
         '<span class="cdveil"></span>';
@@ -208,6 +216,64 @@
       abilitiesEl.appendChild(hb);
     }
   }
+  // ---------- MODS v1: the rail under the pods ----------
+  // The rail mirrors the referee charge for charge: buttons only exist for
+  // dealt mods, charges only spend on a logged fire, and the hidden feeds
+  // (Coil, Plate) accumulate exactly where the referee accumulates them.
+  function buildModRail(st) {
+    if (!modrailEl) return;
+    modrailEl.innerHTML = '';
+    var dep = (st.mods && st.mods.deploy) || {};
+    Object.keys(dep).forEach(function (id) {
+      var m = dep[id];
+      var b = document.createElement('button');
+      b.className = 'tool mod'; b.id = 'mod-' + id;
+      b.style.setProperty('--mc', m.color);
+      var pips = '';
+      for (var i = 0; i < (m.charges || 0); i++) pips += '<span class="pip full"></span>';
+      b.innerHTML = '<span class="tname" style="color:' + m.color + '">' + m.sigil + ' ' + m.name + '</span>' +
+        '<span class="tdmg">' + (id === 'overclock' ? 'next strike hasted' : id === 'tracepurge' ? 'trace −35% now' :
+          id === 'ghostplate' ? 'blows feed a hidden plate · 8s' : 'the Twin’s next strike lands late') + '</span>' +
+        '<span class="pips">' + pips + '</span>';
+      b.title = m.line;
+      b.addEventListener('click', function () { fireMod(id); });
+      modrailEl.appendChild(b);
+    });
+  }
+  // The flat bonus waiting in the fighter's hands — the referee's own rule:
+  // the Coil pays on the next strike; the Plate only after its window closes.
+  function strikeBonusClient(now) {
+    var b = S.payback || 0; S.payback = 0;
+    if (S.plateFed > 0 && now >= S.plateUntil) { b += S.plateFed; S.plateFed = 0; floatText('THE GHOST PLATE DISCHARGES +' + Math.round(b), '#b967ff', true); }
+    return b;
+  }
+  function fireMod(id) {
+    if (!S || S.over) return;
+    var dep = (S.stats.mods && S.stats.mods.deploy) || {};
+    if (!dep[id]) return;
+    if (!(S.modCharges[id] > 0)) { sfx('deny'); return; }
+    var now = elapsed();
+    S.modCharges[id]--;
+    S.actions.push({ t: Math.round(now), tool: 'mod:' + id });
+    if (id === 'overclock') {
+      S.overclockArmed = true;
+      floatText('OVERCLOCK — THE NEXT STRIKE RESOLVES HASTED', '#00e5ff', true);
+    } else if (id === 'tracepurge') {
+      S.trace = Math.max(0, S.trace - 35);
+      floatText('TRACE PURGE −35%', '#5dffa0', true);
+    } else if (id === 'ghostplate') {
+      S.plateUntil = now + 8000;
+      floatText('GHOST PLATE — ARMED', '#b967ff', true);
+    } else if (id === 'coldsnap') {
+      for (var i = 0; i < S.strikes.length; i++) {
+        var s = S.strikes[i];
+        if (!s.done) { s.at += 1200; floatText('COLD SNAP — ITS RHYTHM FREEZES', '#7df9ff', true); break; }
+      }
+      S.strikes.sort(function (a, b) { return a.at - b.at; });
+    }
+    sfx('modfire');
+    updateHud();
+  }
   function useAbility(id) {
     if (!S || S.over) return;
     var now = elapsed();
@@ -238,10 +304,11 @@
       var crit = 1;
       if (S.critNext > 0) { crit *= (1 + S.critNext); S.critNext = 0; S.phantomUntil = 0; }
       if (now >= S.vulnFrom && now <= S.vulnUntil) { crit *= S.combat.vulnMult; floatText('VULNERABLE ×' + S.combat.vulnMult, '#fcee0a', true); }
+      var odBonus = strikeBonusClient(now);
       S.beam = { until: performance.now() + 240, color: a.color };
-      hitFx(dmg * crit, a.color, 60);
+      hitFx(dmg * crit + odBonus, a.color, 60);
       S.shake = Math.min(18, S.shake + 12);
-      floatText('OVERDRIVE ' + Math.round(dmg * crit), '#ff2a6d', true);
+      floatText('OVERDRIVE ' + Math.round(dmg * crit + odBonus), '#ff2a6d', true);
       sfx('overdrive');
     }
     updateKit();
@@ -345,6 +412,11 @@
     sfx('hitPlayer');
   }
   function hurt(dmg, label, big) {
+    // MODS drink the blow first: the Plate feeds inside its window (half
+    // the weight, capped); the Coil feeds while its phantom stands.
+    var hnow = elapsed();
+    if (hnow < S.plateUntil) S.plateFed = Math.min(20, S.plateFed + dmg * 0.5);
+    if (S.paybackPhantomUntil > 0 && hnow < S.paybackPhantomUntil) S.payback = Math.min(12, S.payback + dmg * 0.25);
     S.integrity = Math.max(0, S.integrity - dmg);
     S.hurt = Math.min(1, S.hurt + (big ? 0.85 : 0.45));
     S.shake = Math.min(18, S.shake + (big ? 13 : 6));
@@ -376,6 +448,8 @@
     // RAPID CYCLING: a use inside the window earns the halved cooldown —
     // the same one the referee will hold you to.
     S.cds[id] = now + (now <= S.rapidUntil ? t.cooldown * 0.5 : t.cooldown);
+    // OVERCLOCK (mod rail): the armed strike's own cooldown halves again.
+    if (S.overclockArmed) { S.cds[id] = now + (S.cds[id] - now) * 0.5; S.overclockArmed = false; }
     S.lastUse[id] = now;
     S.actions.push({ t: Math.round(now), tool: id });
     S.uses[id] = (S.uses[id] || 0) + 1;
@@ -397,12 +471,18 @@
     // A decoy burned into a wind-up eats the strike before it lands.
     if (id === 'decoy') {
       S.lastDecoyAt = now;
+      // PAYBACK COIL (fitted): its phantom drinks blows for 5 seconds.
+      if (t.paybackCoil) S.paybackPhantomUntil = now + 5000;
+      // THROUGHLINE (fitted): the mark goes through the Decoy.
+      var pt = S.stats.tools.probe;
+      if (pt && pt.markThroughDecoy && S.markCharges > 0 && now <= S.markUntil + 2500) S.markUntil = now + (pt.markMs || 4000);
       var s = windingHaymaker(now);
       if (s) { s.eaten = true; floatText('DECOY UP — IT SWINGS AT THE GHOST', '#fcee0a', false); }
     }
 
     var dmg = (S.morphed && t.dmgMorph !== undefined) ? t.dmgMorph : t.dmg;
     var crit = 1;
+    var modBonus = id !== 'decoy' ? strikeBonusClient(now) : 0;
     if (id !== 'decoy') {
       if (S.critNext > 0) { crit *= (1 + S.critNext); S.critNext = 0; S.phantomUntil = 0; }
       if (id === 'flood' && now - S.lastProbeAt <= 3000) {
@@ -421,20 +501,22 @@
       S.markCharges = t.twoEyes ? 2 : 1;
       S.lastProbeAt = now;
       S.beam = { until: performance.now() + 140, color: t.color };
-      hitFx(dmg * crit, t.color, 10);
+      hitFx(dmg * crit + modBonus, t.color, 10);
       sfx('probe');
     } else if (id === 'flood') {
       S.beam = { until: performance.now() + 200, color: t.color };
-      hitFx(dmg * crit, t.color, 46);
+      hitFx(dmg * crit + modBonus, t.color, 46);
       if (t.splash && !S.over) hitFx(t.splash, t.color, 6);
       if (t.ignite) S.dots.push({ until: now + t.ignite.secs * 1000, dps: t.ignite.dps });
+      if (t.modBurn) S.dots.push({ until: now + t.modBurn.secs * 1000, dps: t.modBurn.dps });
       S.shake = Math.min(16, S.shake + 9);
       sfx('flood');
     } else if (id === 'whisper') {
       var dps = (S.morphed && t.dotMorph !== undefined) ? t.dotMorph : t.dot;
       S.dots.push({ until: now + t.dotSecs * 1000, dps: dps });
       if (t.traceBurn) S.trace = Math.max(0, S.trace - t.traceBurn);
-      hitFx(dmg * crit, t.color, 14);
+      if (t.traceShed) S.trace = Math.max(0, S.trace - t.traceShed);
+      hitFx(dmg * crit + modBonus, t.color, 14);
       sfx('whisper');
       // COLD TRAIL — a Whisper on a fresh Decoy's heels dumps trace.
       if (now - S.lastDecoyAt <= 5000) {
@@ -591,6 +673,20 @@
         var span = Math.max(1, S.vulnUntil - S.vulnFrom);
         winframeBar.style.width = Math.round(Math.max(0, (S.vulnUntil - nowH) / span) * 100) + '%';
       }
+    }
+    // The MOD RAIL refreshes on the same sweep: pips are charges, spent
+    // buttons go dark, an armed Overclock or a live Plate pulses.
+    if (modrailEl && S.stats.mods && S.stats.mods.deploy) {
+      Object.keys(S.stats.mods.deploy).forEach(function (id) {
+        var b = document.getElementById('mod-' + id);
+        if (!b) return;
+        var left = S.modCharges[id] || 0;
+        b.disabled = left <= 0 || S.over;
+        b.classList.toggle('spent', left <= 0);
+        b.classList.toggle('armed', (id === 'overclock' && S.overclockArmed) || (id === 'ghostplate' && elapsed() < S.plateUntil));
+        var pips = b.querySelectorAll('.pip');
+        for (var i = 0; i < pips.length; i++) pips[i].classList.toggle('full', i < left);
+      });
     }
     // Ability pods cool down on the same sweep as the tools.
     if (abilitiesEl && S.stats.abilities) {
@@ -859,6 +955,8 @@
       var comboLine = fs && fs.combos && fs.combos.length ? ('<p class="v-name">Combos: ' + fs.combos.map(function (c) { return { 'mark-drown': 'MARK & DROWN', 'cold-trail': 'COLD TRAIL', 'open-window': 'OPEN WINDOW' }[c] || c; }).join(' · ') + '</p>') : '';
       var pitLine = v.mode === 'pit' ? ('<p class="v-name">⚔ The Pit' + (v.bountyWon ? ' — bounty taken: <strong>' + v.bountyWon + ' pts</strong>' : '') + (v.feints ? ' · it showed ' + v.feints + ' Mirage phantom' + (v.feints === 1 ? '' : 's') : '') + (v.morphed ? ' · its armor <strong>morphed</strong> mid-fight' : '') + '</p>') : '';
       var gearLine = (v.heartBroke ? '<p class="v-name">💔 Your Second Heart broke — and you stood back up.</p>' : '') + (v.bellRung ? '<p class="v-name">🔔 The Stillbell rang; the trace held its breath.</p>' : '');
+      var modsLine = fs && fs.modsUsed && fs.modsUsed.length ? ('<p class="v-name">Mods fired: ' + fs.modsUsed.map(function (m) { return { overclock: 'OVERCLOCK', tracepurge: 'TRACE PURGE', ghostplate: 'GHOST PLATE', coldsnap: 'COLD SNAP' }[m] || m; }).join(' · ') + '</p>') : '';
+      var modDropLine = v.modDrop ? ('<p class="dropbanner rare">MOD FOUND IN THE WRECKAGE — ' + escHtml(v.modDrop.name) + (v.modDrop.kind === 'fitted' ? ' · socket it at your satchel' : ' · it rides your rail now') + '</p>') : '';
       var dropHtml = '';
       (v.drops || []).forEach(function (dr) {
         var names = { mirrorwrap: 'THE MIRROR WRAP', anchorstitch: 'ANCHOR STITCH', secondheart: 'THE SECOND HEART', stillbell: 'THE STILLBELL', foundersember: "THE FOUNDER'S EMBER" };
@@ -874,7 +972,7 @@
       html = '<div class="vcard-inner vcard ' + (v.result === 'win' ? 'win' : '') + '">' +
         '<h1 class="glitch">' + title + '</h1>' +
         '<p class="v-name">' + (voided ? 'That bout\u2019s log did not hold up — remembered, but it taught nothing and earned nothing. ' : '') + shapes + '</p>' + fsLine +
-        xpLine + comboLine + pitLine + gearLine + dropHtml +
+        xpLine + comboLine + pitLine + gearLine + modsLine + modDropLine + dropHtml +
         '<div class="v-stats"><div><strong>+' + v.points + '</strong><span>points</span></div>' +
         '<div><strong>' + Math.floor(v.secs / 60) + ':' + String(v.secs % 60).padStart(2, '0') + '</strong><span>time</span></div></div>' +
         '<div class="v-actions"><a class="fightbtn small" href="/verdict/' + v.id + '">Full verdict card</a>' +
