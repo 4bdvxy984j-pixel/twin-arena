@@ -1139,6 +1139,65 @@ async function route(req, res) {
     return deckBack(res, ADMIN_KEY, 'notice=untied');
   }
 
+  // SUPER DECK — ROSTER (ADMIN_KEY only): the member roll with satchels, so
+  // the Keeper can see exactly who holds what. Read-only; JSON.
+  if (method === 'GET' && p === '/api/deck/roster') {
+    if (String(url.searchParams.get('key') || '') !== ADMIN_KEY) return sendJson(res, { error: 'wrong key' }, 403);
+    const members = Object.values(state.players).map(ensurePlayer).filter(x => x.email)
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+      .map(x => ({
+        id: x.id, email: x.email, name: x.displayName, isOwner: !!x.isOwner,
+        createdAt: x.createdAt || null, xp: x.xp || 0, level: game.levelForXp(x.xp || 0),
+        points: x.points || 0, bouts: x.record ? x.record.bouts : 0, breaches: x.record ? x.record.breaches : 0,
+        items: itemCounts(x),
+        gear: (x.gear || []).map(g => ({
+          id: g.id, slot: g.slot, tier: g.tier, name: g.name, worn: !!g.worn, banked: !!g.banked,
+          unique: g.unique || null, serial: g.serial || null,
+          affixes: (g.affixes || []).map(a => a.label)
+        }))
+      }));
+    return sendJson(res, { members });
+  }
+
+  // SUPER DECK — GRANT GEAR (ADMIN_KEY only): the Keeper hands a fighter real
+  // Descent gear, rolled by the same machinery that rolls the drops
+  // (rollGearPiece + bankHaul — genuine records with affixes, never display
+  // fakes). Deliberately capped at EPIC: LEGENDARY and GODFORGED are numbered
+  // Keeper-signed editions and are NEVER granted here — they are earned in
+  // the deep or not at all. Bonus items and Founder's Embers are likewise
+  // outside this route. Wears the granted piece per slot when asked, so the
+  // fighter steps into battle already kitted.
+  if (method === 'POST' && p === '/api/deck/grant-gear') {
+    const f = await bodyJson(req).catch(() => ({}));
+    if (String(f.key || '') !== ADMIN_KEY) return sendJson(res, { error: 'wrong key' }, 403);
+    const target = state.players[String(f.playerId || '')];
+    if (!target || !target.email) return sendJson(res, { error: 'no such member fighter' }, 404);
+    ensurePlayer(target);
+    const GRANT_TIERS = ['STURDY', 'RARE', 'EPIC'];
+    const spec = Array.isArray(f.pieces) ? f.pieces.slice(0, 20) : [];
+    if (!spec.length) return sendJson(res, { error: 'no pieces requested' }, 400);
+    for (const s of spec) {
+      if (!game.GEAR_SLOTS.includes(String(s && s.slot))) return sendJson(res, { error: 'bad slot: ' + (s && s.slot) }, 400);
+      if (!GRANT_TIERS.includes(String(s && s.tier))) return sendJson(res, { error: 'tier not grantable: ' + (s && s.tier) + ' (grants cap at EPIC; LEGENDARY and GODFORGED are earned, never handed out)' }, 400);
+    }
+    const rng = () => crypto.randomInt(0, 281474976710655) / 281474976710655;
+    const rolled = spec.map(s => game.rollGearPiece(state, rng, { slot: String(s.slot), tier: String(s.tier) }));
+    game.bankHaul(target, rolled);
+    if (f.wear) {
+      // Wear the strongest granted piece in each slot it covers.
+      const rank = { STURDY: 1, RARE: 2, EPIC: 3 };
+      const best = {};
+      for (const piece of rolled) if (!best[piece.slot] || rank[piece.tier] > rank[best[piece.slot].tier]) best[piece.slot] = piece;
+      for (const slot of Object.keys(best)) game.wearGear(target, best[slot].id);
+    }
+    store.save(true);
+    return sendJson(res, {
+      grantedTo: { id: target.id, email: target.email, name: target.displayName },
+      granted: rolled.map(g => ({ id: g.id, slot: g.slot, tier: g.tier, name: g.name, worn: !!g.worn, affixes: (g.affixes || []).map(a => a.label) })),
+      gearNow: (target.gear || []).map(g => ({ id: g.id, slot: g.slot, tier: g.tier, name: g.name, worn: !!g.worn, affixes: (g.affixes || []).map(a => a.label) }))
+    });
+  }
+
   return sendHtml(res, views.shell('Not found', '<section class="authbox"><h1>Nothing stands here.</h1><p><a href="/">Back to the arena door</a></p></section>', me), 404);
 }
 
