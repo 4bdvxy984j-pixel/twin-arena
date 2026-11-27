@@ -248,6 +248,7 @@ main{max-width:1060px; margin:0 auto; padding:1.2rem 1rem 3rem}
 .ghostbtn{background:transparent; color:var(--cyan); border:1px solid var(--line);
   padding:.5rem 1rem; cursor:pointer; font-weight:700; text-decoration:none; display:inline-block; text-transform:uppercase; font-size:.85rem; letter-spacing:.06em; clip-path:var(--cut)}
 .ghostbtn:hover{border-color:var(--cyan); color:var(--yellow)}
+.soundbtn{padding:.32rem .7rem; font-size:.78rem}
 
 /* verdict card */
 .vwrap{display:flex; justify-content:center; padding-top:1.6rem}

@@ -39,15 +39,27 @@
     setInterval(refresh, 5000);
   }
 
+  // Sound: big doors tick (and wake the audio) on the way in.
+  document.addEventListener('click', function (e) {
+    var t = e.target && e.target.closest ? e.target.closest('.fightbtn') : null;
+    if (t && window.TASFX) { TASFX.unlock(); TASFX.play('click'); }
+  });
+
   // Evolution web: purchase buttons.
   document.querySelectorAll('.evolvebtn').forEach(function (btn) {
     btn.addEventListener('click', function () {
+      if (window.TASFX) TASFX.unlock();
       btn.disabled = true;
       fetch('/api/evolve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ node: btn.getAttribute('data-node') })
       }).then(function (r) { return r.json(); }).then(function (d) {
-        if (d.ok) { location.reload(); return; }
+        if (d.ok) {
+          if (window.TASFX) TASFX.play('evolve');
+          setTimeout(function () { location.reload(); }, 320); // let the sound land
+          return;
+        }
+        if (window.TASFX) TASFX.play('deny');
         var err = document.getElementById('weberr');
         if (err) { err.textContent = d.error || 'That evolution refused.'; err.classList.remove('hidden'); }
         btn.disabled = false;

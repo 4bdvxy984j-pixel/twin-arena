@@ -20,26 +20,15 @@
   var tracebar = document.getElementById('tracebar'), tracetext = document.getElementById('tracetext');
   var tracewrap = document.getElementById('tracewrap');
   var clockEl = document.getElementById('clock');
-  var muteBtn = document.getElementById('mutebtn');
 
   var S = null; // fight state
-  var audio = null, muted = false;
-  muteBtn.addEventListener('click', function () {
-    muted = !muted;
-    muteBtn.textContent = 'Sound: ' + (muted ? 'off' : 'on');
-  });
-  function beep(freq, dur, type, gain) {
-    if (muted) return;
-    try {
-      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-      var o = audio.createOscillator(), g = audio.createGain();
-      o.type = type || 'sine'; o.frequency.value = freq;
-      g.gain.value = gain || 0.05;
-      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + (dur || 0.12));
-      o.connect(g); g.connect(audio.destination);
-      o.start(); o.stop(audio.currentTime + (dur || 0.12));
-    } catch (e) {}
-  }
+  // Sound lives in /js/sfx.js (window.TASFX): a real engine whose context is
+  // created + resumed inside user gestures. The old local beep() created its
+  // context inside a fetch callback and never resumed it — on phones the
+  // context stayed suspended and the game was silent. The arena's own
+  // #mutebtn is wired by sfx.js, alongside the header's #soundbtn.
+  var SFX = window.TASFX || null;
+  function sfx(name) { if (SFX) SFX.play(name); }
 
   function fmtClock(ms) {
     var s = Math.max(0, Math.ceil(ms / 1000));
@@ -49,6 +38,7 @@
 
   // ---------- start ----------
   startBtn.addEventListener('click', function () {
+    if (SFX) SFX.unlock(); // inside the tap, synchronously — this is what wakes the audio
     startBtn.disabled = true;
     startBtn.textContent = 'THE GATE STIRS…';
     fetch('/api/fight/start', {
@@ -81,6 +71,7 @@
       markUntil: 0, critNext: 0,
       strikes: (d.strikes || []).map(function (s) { return { at: s.at, kind: s.kind, tool: s.tool, parried: false, eaten: false, done: false }; }),
       vulnFrom: -1, vulnUntil: -1, parryCdUntil: 0,
+      alarmStage: 0, crackStage: 0,
       shake: 0, flash: 0, eyeRage: 0, hurt: 0, over: false, endReason: null,
       particles: [], texts: [], phantomUntil: 0, beam: null, strikeFx: null,
       famShown: {}, uses: {}
@@ -91,7 +82,8 @@
     parryBtn.disabled = false;
     buildKit(st);
     clockEl.textContent = fmtClock(S.left);
-    beep(196, 0.3, 'triangle', 0.06);
+    sfx('begin');
+    if (SFX) SFX.humStart();
     requestAnimationFrame(frame);
   }
 
@@ -129,14 +121,14 @@
     var now = elapsed();
     if (now < S.parryCdUntil) return;
     var s = windingHaymaker(now);
-    if (!s) { beep(120, 0.06, 'square', 0.03); return; } // never log a parry the referee would call forged
-    if (S.energy < S.combat.parryCost) { beep(110, 0.08, 'square', 0.04); return; }
+    if (!s) { sfx('deny'); return; } // never log a parry the referee would call forged
+    if (S.energy < S.combat.parryCost) { sfx('deny'); return; }
     S.energy -= S.combat.parryCost;
     S.parryCdUntil = now + S.combat.parryCooldown;
     s.parried = true;
     S.actions.push({ t: Math.round(now), tool: 'parry' });
     floatText('PARRY READY — WAIT FOR IT…', '#fcee0a', false);
-    beep(1250, 0.09, 'sine', 0.05);
+    sfx('parryArm');
   }
   parryBtn.addEventListener('click', tryParry);
 
@@ -148,11 +140,12 @@
         S.vulnFrom = s.at; S.vulnUntil = s.at + cb.vulnMs;
         floatText('PARRIED — IT\u2019S OPEN. HIT IT.', '#fcee0a', true);
         S.eyeRage = 1;
-        beep(1560, 0.16, 'sine', 0.06);
+        sfx('parry');
         return;
       }
-      if (s.eaten) { floatText('THE DECOY TOOK THE HIT', '#fcee0a', false); beep(340, 0.15, 'triangle', 0.05); return; }
+      if (s.eaten) { floatText('THE DECOY TOOK THE HIT', '#fcee0a', false); sfx('decoyEat'); return; }
       hurt(cb.strikeDmg.haymaker, 'HAYMAKER CONNECTS −' + cb.strikeDmg.haymaker, true);
+      sfx('haymakerHit');
       return;
     }
     if (s.kind === 'glance') {
@@ -163,13 +156,13 @@
       if (b) { b.classList.remove('scrambled'); void b.offsetWidth; b.classList.add('scrambled'); }
       floatText('GLANCE — ' + S.stats.tools[tool].name.toUpperCase() + ' SCRAMBLED', '#ffd166', true);
       hurt(cb.strikeDmg.glance, null, false);
-      beep(300, 0.12, 'square', 0.04);
+      sfx('scramble');
       return;
     }
     // clean hit — it punches back, plain and hard
     hurt(cb.strikeDmg.clean, null, false);
     S.strikeFx = { until: performance.now() + 160 };
-    beep(90, 0.18, 'sawtooth', 0.06);
+    sfx('hitPlayer');
   }
   function hurt(dmg, label, big) {
     S.integrity = Math.max(0, S.integrity - dmg);
@@ -186,16 +179,18 @@
     var t = S.stats.tools[id];
     if (S.cds[id] && now < S.cds[id]) return;
     if (S.lockouts[id] && now < S.lockouts[id]) return;
-    if (S.energy < t.cost) { beep(110, 0.08, 'square', 0.04); return; }
+    if (S.energy < t.cost) { sfx('deny'); return; }
     S.energy -= t.cost;
     S.cds[id] = now + t.cooldown;
     S.lastUse[id] = now;
     S.actions.push({ t: Math.round(now), tool: id });
     S.uses[id] = (S.uses[id] || 0) + 1;
 
-    // The trace hears everything.
+    // The trace hears everything — and at 75% / 90% it says so, out loud.
     S.trace = Math.max(0, Math.min(S.combat.traceMax, S.trace + t.trace));
     if (t.trace > 0) floatText('+' + t.trace + '% TRACE', '#ff2a6d', false);
+    if (S.trace >= 90 && S.alarmStage < 2) { S.alarmStage = 2; sfx('alarm2'); }
+    else if (S.trace >= 75 && S.alarmStage < 1) { S.alarmStage = 1; sfx('alarm'); }
     if (S.trace >= S.combat.traceMax) { updateHud(); endFight('trace'); return; }
 
     // The Twin visibly learns: every repeat of a tool raises its shown familiarity.
@@ -220,28 +215,38 @@
       S.markUntil = now + 4000;
       S.beam = { until: performance.now() + 140, color: t.color };
       hitFx(dmg * crit, t.color, 10);
-      beep(880, 0.07, 'sine', 0.05);
+      sfx('probe');
     } else if (id === 'flood') {
       S.beam = { until: performance.now() + 200, color: t.color };
       hitFx(dmg * crit, t.color, 46);
       S.shake = Math.min(16, S.shake + 9);
-      beep(140, 0.22, 'sawtooth', 0.06);
+      sfx('flood');
     } else if (id === 'whisper') {
       S.dots.push({ until: now + t.dotSecs * 1000, dps: t.dot });
       hitFx(dmg * crit, t.color, 14);
-      beep(520, 0.18, 'sine', 0.045);
+      sfx('whisper');
     } else if (id === 'decoy') {
       S.critNext = S.stats.decoyCrit;
       S.phantomUntil = now + 5000;
       if (!windingHaymaker(now)) floatText('A PHANTOM GATE STANDS', '#fcee0a');
-      beep(340, 0.2, 'triangle', 0.05);
+      sfx('decoy');
     }
     if (crit > 1 && id !== 'decoy') floatText('BREACH IN THE PATTERN ×' + crit.toFixed(1), '#ffd166');
     updateKit();
   }
 
+  // The gate audibly comes apart in stages: 75% / 50% / 25% integrity.
+  function checkCrack() {
+    if (!S || S.over) return;
+    var frac = S.hp / S.maxHp;
+    var stage = frac <= 0.25 ? 3 : frac <= 0.5 ? 2 : frac <= 0.75 ? 1 : 0;
+    if (stage > S.crackStage) { S.crackStage = stage; sfx('crack' + stage); }
+  }
+
   function hitFx(dmg, color, n) {
     S.hp = Math.max(0, S.hp - dmg);
+    sfx('hit');
+    checkCrack();
     S.flash = Math.min(1, S.flash + 0.35);
     S.eyeRage = Math.min(1, S.eyeRage + 0.25);
     for (var i = 0; i < n; i++) {
@@ -288,7 +293,12 @@
         return false;
       });
       if (S.hp <= 0) { endFight('breach'); }
+      checkCrack();
       if (!S.over && !burning && S.hp > 0) S.hp = Math.min(S.stats.gateHp, S.hp + S.stats.gateRegen * dt);
+      if (S.trace < 70 && S.alarmStage) S.alarmStage = 0; // cooled off — the alarm can speak again
+      // the haymaker's wind-up gets a voice the moment the telegraph opens
+      var windingNow = windingHaymaker(now);
+      if (windingNow && !windingNow.sndWindup) { windingNow.sndWindup = true; sfx('windup'); }
       // the Twin's rhythm: strikes land on schedule whether you watch or not
       for (var i = 0; i < S.strikes.length && !S.over; i++) {
         var s = S.strikes[i];
@@ -527,7 +537,11 @@
     parryBtn.classList.remove('armed');
     var durationMs = Math.round(elapsed());
     var damagePct = Math.round((1 - S.hp / S.maxHp) * 100);
-    beep(reason === 'breach' ? 660 : 130, 0.4, 'triangle', 0.07);
+    if (SFX) SFX.humStop();
+    if (reason === 'breach') sfx('breach');
+    else if (reason === 'trace') sfx('caught');
+    else if (reason === 'integrity') sfx('thrownOut');
+    else sfx('defeat');
     if (reason === 'breach') { for (var i = 0; i < 90; i++) hitFxSpark(); }
     fetch('/api/fight/finish', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -569,5 +583,6 @@
     }
     verdictEl.innerHTML = html;
     verdictEl.classList.remove('hidden');
+    sfx(v && v.result === 'win' ? 'verdictWin' : 'verdictLose');
   }
 })();

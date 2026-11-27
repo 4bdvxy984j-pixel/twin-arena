@@ -14,10 +14,11 @@ function shell(title, body, me) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${esc(title)} — THE TWIN ARENA</title>
 <link rel="stylesheet" href="/css/style.css">
+<script src="/js/sfx.js"></script>
 </head><body>
 <header class="topbar">
   <a class="brand" href="/"><span class="brandmark">◐</span> THE TWIN ARENA</a>
-  <nav><a href="/arena">Fight</a><a href="/web">Evolution</a>${who}</nav>
+  <nav><a href="/arena">Fight</a><a href="/web">Evolution</a>${who}<button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
 </header>
 <main>${body}</main>
 <footer class="foot">
