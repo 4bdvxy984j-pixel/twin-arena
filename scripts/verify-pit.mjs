@@ -295,8 +295,30 @@ const winPolicy = (v) => {
 };
 function planWinPit(startBody) {
   const stats = startBody.stats;
-  const actions = planLog(stats, startBody.strikes, winPolicy);
-  const sim = game.simulateRound({ stats, strikes: startBody.strikes, postMorph: startBody.postMorph || undefined }, actions, stats.roundMs);
+  const fight = { stats, strikes: startBody.strikes, postMorph: startBody.postMorph || undefined };
+  let actions = planLog(stats, startBody.strikes, winPolicy);
+  // The planner cannot see the post-morph strike schedule — when an Inferno
+  // devil sheds, the referee swaps in strikes (glances included) that were
+  // never in the dealt list, and a swing the planner believed legal lands
+  // inside a lockout it never saw. So the plan is repaired against the real
+  // referee: bisect to the first voiding swing, drop it, re-sim, repeat.
+  // What survives is a log the referee itself certifies clean.
+  const REPAIRABLE = ['cooldown scrambled', 'cooldown violated', 'parry outside its window'];
+  for (let iter = 0; iter < 60; iter++) {
+    const sim = game.simulateRound(fight, actions, stats.roundMs);
+    if (!sim.problem) {
+      if (!sim.outcome) return { actions, sim, durationMs: stats.roundMs };
+      return { actions: actions.filter(a => a.t <= sim.outcome.at + 250), sim, durationMs: sim.outcome.at + 250 };
+    }
+    if (!REPAIRABLE.includes(sim.problem)) break;
+    let idx = -1;
+    for (let n = 1; n <= actions.length; n++) {
+      if (game.simulateRound(fight, actions.slice(0, n), stats.roundMs).problem) { idx = n - 1; break; }
+    }
+    if (idx < 0) break;
+    actions.splice(idx, 1);
+  }
+  const sim = game.simulateRound(fight, actions, stats.roundMs);
   if (!sim.outcome) return { actions, sim, durationMs: stats.roundMs };
   return { actions: actions.filter(a => a.t <= sim.outcome.at + 250), sim, durationMs: sim.outcome.at + 250 };
 }

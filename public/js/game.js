@@ -83,7 +83,7 @@
       energy: st.energyMax,
       left: st.roundMs, startedAt: performance.now(), lastFrame: performance.now(),
       cds: {}, lastUse: {}, lockouts: {}, actions: [], dots: [],
-      markUntil: 0, critNext: 0,
+      markUntil: 0, markCharges: 0, critNext: 0,
       strikes: (d.strikes || []).map(function (s) { return { at: s.at, kind: s.kind, tool: s.tool, revealed: !!s.revealed, parried: false, eaten: false, done: false }; }),
       postMorph: (d.postMorph || []).map(function (s) { return { offset: s.offset, kind: s.kind, tool: s.tool, revealed: !!s.revealed, parried: false, eaten: false, done: false }; }),
       morphed: false,
@@ -313,6 +313,13 @@
     }
     if (s.kind === 'glance') {
       var tool = S.stats.tools[s.tool] ? s.tool : 'probe';
+      // SILENT (gear): a glance cannot scramble what it cannot hear.
+      if (S.stats.tools[tool] && S.stats.tools[tool].silent) {
+        floatText('GLANCE — ' + S.stats.tools[tool].name.toUpperCase() + ' IS SILENT. NOTHING SCRAMBLES.', '#b967ff', true);
+        hurt(cb.strikeDmg.glance, null, false);
+        sfx('hitPlayer');
+        return;
+      }
       var ready = S.lastUse[tool] !== undefined ? S.lastUse[tool] + S.stats.tools[tool].cooldown : now;
       S.lockouts[tool] = Math.max(ready, now) + cb.scrambleMs;
       var b = document.getElementById('tool-' + tool);
@@ -390,9 +397,9 @@
       if (S.critNext > 0) { crit *= (1 + S.critNext); S.critNext = 0; S.phantomUntil = 0; }
       if (id === 'flood' && now - S.lastProbeAt <= 3000) {
         // MARK & DROWN — the combo replaces the plain mark bonus.
-        crit *= 1.5; S.markUntil = 0;
+        crit *= 1.5; S.markUntil = 0; S.markCharges = 0;
         floatText('MARK & DROWN ×1.5', '#ffd166', true); sfx('combo');
-      } else if (S.markUntil > now && id !== 'probe') { crit *= 1.3; S.markUntil = 0; }
+      } else if (S.markUntil > now && id !== 'probe') { crit *= 1.3; if (--S.markCharges <= 0) S.markUntil = 0; }
       if (now >= S.vulnFrom && now <= S.vulnUntil) {
         crit *= S.combat.vulnMult;
         floatText('VULNERABLE ×' + S.combat.vulnMult, '#fcee0a', true);
@@ -400,7 +407,8 @@
       }
     }
     if (id === 'probe') {
-      S.markUntil = now + 4000;
+      S.markUntil = now + (t.markMs || 4000);
+      S.markCharges = t.twoEyes ? 2 : 1;
       S.lastProbeAt = now;
       S.beam = { until: performance.now() + 140, color: t.color };
       hitFx(dmg * crit, t.color, 10);
@@ -408,11 +416,14 @@
     } else if (id === 'flood') {
       S.beam = { until: performance.now() + 200, color: t.color };
       hitFx(dmg * crit, t.color, 46);
+      if (t.splash && !S.over) hitFx(t.splash, t.color, 6);
+      if (t.ignite) S.dots.push({ until: now + t.ignite.secs * 1000, dps: t.ignite.dps });
       S.shake = Math.min(16, S.shake + 9);
       sfx('flood');
     } else if (id === 'whisper') {
       var dps = (S.morphed && t.dotMorph !== undefined) ? t.dotMorph : t.dot;
       S.dots.push({ until: now + t.dotSecs * 1000, dps: dps });
+      if (t.traceBurn) S.trace = Math.max(0, S.trace - t.traceBurn);
       hitFx(dmg * crit, t.color, 14);
       sfx('whisper');
       // COLD TRAIL — a Whisper on a fresh Decoy's heels dumps trace.
@@ -424,9 +435,23 @@
       S.critNext = S.stats.decoyCrit;
       S.phantomUntil = now + 5000;
       if (!windingHaymaker(now)) floatText('A PHANTOM GATE STANDS', '#fcee0a');
+      // THE SECOND GHOST (gear): the decoy strikes once before it fades.
+      if (t.ghostStrike && !S.over) { hitFx(t.ghostStrike, t.color, 8); floatText('THE SECOND GHOST STRIKES', '#fcee0a', true); }
+      // A twinned decoy dumps its trace twice.
+      if (t.twin) S.trace = Math.max(0, S.trace + t.trace);
       sfx('decoy');
     }
     if (crit > 1 && id !== 'decoy') floatText('BREACH IN THE PATTERN ×' + crit.toFixed(1), '#ffd166');
+    // TWINNED (the Captor's prize): the strike lands a second time — full
+    // base damage, and the trace hears it too. Mirrors the referee exactly.
+    if (t.twin && id !== 'decoy' && !S.over) {
+      var dmg2 = (S.morphed && t.dmgMorph !== undefined) ? t.dmgMorph : t.dmg;
+      hitFx(dmg2, t.color, 20);
+      if (id === 'whisper') { var dps2 = (S.morphed && t.dotMorph !== undefined) ? t.dotMorph : t.dot; S.dots.push({ until: now + t.dotSecs * 1000, dps: dps2 }); }
+      if (id === 'flood' && t.splash && !S.over) hitFx(t.splash, t.color, 6);
+      floatText('TWINNED — IT STRIKES TWICE', '#ffd166', true);
+      if (!S.over) applyTrace(heardTrace(t.trace || 0, now), now);
+    }
     updateKit();
   }
 

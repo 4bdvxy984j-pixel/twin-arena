@@ -19,7 +19,7 @@ function shell(title, body, me) {
 </head><body>
 <header class="topbar">
   <a class="brand" href="/"><span class="brandmark">◐</span> THE TWIN ARENA</a>
-  <nav><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/web">Evolution</a>${who}<button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
+  <nav><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/descent">The Descent</a><a href="/web">Evolution</a>${who}<button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
 </header>
 <main>${body}</main>
 <footer class="foot">
@@ -73,6 +73,12 @@ function spotlightHtml(state) {
 }
 
 function railText(f) {
+  if (f.mode === 'descent') {
+    if (f.how === 'death') return 'died in the Descent';
+    if (f.how === 'ascend') return 'ascended from the deep';
+    if (f.how === 'void') return 'had a run voided';
+    return 'was turned back in the deep';
+  }
   if (f.result === 'win') return 'breached the gate';
   if (f.how === 'trace') return 'was caught';
   if (f.how === 'integrity') return 'was thrown out';
@@ -113,6 +119,21 @@ function landing(state, me) {
       <h3 class="boardh">Most breaches — the hunters</h3>
       <ul class="board">${topHunters.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${p.pitAttack.breaches} devils breached</span></a></li>`).join('') || '<li class="dim">No hunter has drawn blood yet.</li>'}</ul>
       <p class="dim founders-line">🔥 Founders' Embers: <strong>${(state.itemsSeq && state.itemsSeq.foundersember) || 0} of 100</strong> claimed${((state.itemsSeq && state.itemsSeq.foundersember) || 0) >= 100 ? ' — the mint is closed forever' : ' — granted to the first 100 claimed fighters, then never again'}.</p>`;
+  const dtally = state.descent || { runs: 0, deaths: 0, ascents: 0, turned: 0, bossesSlain: 0, legendaries: 0, godforged: 0, depthsCleared: 0 };
+  const dplayers = Object.values(state.players).filter(x => x.email && x.descent);
+  const drec = x => x.descent || { deepest: 0, bestScore: 0, bestHaul: 0 };
+  const topDeep = dplayers.filter(x => drec(x).deepest > 0).sort((a, b) => drec(b).deepest - drec(a).deepest).slice(0, 5);
+  const topScore = dplayers.filter(x => drec(x).bestScore > 0).sort((a, b) => drec(b).bestScore - drec(a).bestScore).slice(0, 5);
+  const topHaul = dplayers.filter(x => drec(x).bestHaul > 0).sort((a, b) => drec(b).bestHaul - drec(a).bestHaul).slice(0, 5);
+  const descentBoards = `
+      <h2 class="mt">The Descent — delve boards</h2>
+      <p class="dim">${dtally.runs} runs down · ${dtally.depthsCleared} depths cleared · ${dtally.bossesSlain} bosses slain · ${dtally.legendaries} LEGENDARY pieces banked · <strong>${dtally.godforged || 0} GODFORGED pieces exist in the world</strong> — they fall only from bosses at Depth 9 and deeper, at a few percent, and the count above is the whole truth of how many there are. <a href="/descent">Take the stairs down →</a></p>
+      <h3 class="boardh">Deepest depth</h3>
+      <ul class="board">${topDeep.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">Depth ${drec(p).deepest}</span></a></li>`).join('') || '<li class="dim">Nobody has gone down yet.</li>'}</ul>
+      <h3 class="boardh">Highest score</h3>
+      <ul class="board">${topScore.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${drec(p).bestScore} pts</span></a></li>`).join('') || '<li class="dim">No scored run yet.</li>'}</ul>
+      <h3 class="boardh">Richest haul banked</h3>
+      <ul class="board">${topHaul.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${drec(p).bestHaul}</span></a></li>`).join('') || '<li class="dim">No haul banked yet.</li>'}</ul>`;
   const body = `
   <section class="hero">
     <div class="hero-gate" aria-hidden="true"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="eye"></div></div>
@@ -137,6 +158,7 @@ function landing(state, me) {
       <h2>Leaderboard</h2>
       <ul class="board">${board}</ul>
       ${pitBoards}
+      ${descentBoards}
       <h2 class="mt">How it works</h2>
       <ol class="how">
         <li><strong>Fight.</strong> Four tools, one gate, two and a half minutes — and the gate fights back. It strikes on a rhythm: parry the haymaker when it winds up and the gate hangs open, vulnerable.</li>
@@ -279,6 +301,7 @@ function devilCardHtml(state, owner, me, opts) {
     </div>
     ${owner.taunt ? `<p class="taunt">“${esc(owner.taunt)}”</p>` : ''}
     ${game.founderSerial(owner) ? `<p class="embermark">🔥 Founder's Ember No. ${game.founderSerial(owner)} — one of the first hundred. Its holder earns +10% XP; the mark is the honor.</p>` : ''}
+    ${(() => { const worn = game.wornGearMap(owner); const list = game.GEAR_SLOTS.filter(s => worn[s]).map(s => worn[s]); return list.length ? `<p class="pit-gear">Wearing: ${list.map(gp => `<span class="tierbadge t-${gp.tier.toLowerCase()}">${esc(gp.name)} · ${gp.slot === 'body' ? 'Body' : TOOLS[gp.slot].name} (${gp.tier})</span>`).join(' ')}</p>` : ''; })()}
     <p class="pit-stats">Held <strong>${devil.held}</strong> · breached <strong>${devil.breached}</strong>${devil.lastBreachedBy ? ` · last breached by ${esc(devil.lastBreachedBy)}` : ''}<br>
     <span class="dim">Knows ${shapesKnown} challenger shapes · owner's web: ${nodesOwned} evolutions · ${esc(armorLine)}</span></p>
     <div class="pit-gate">${gate}</div>
@@ -383,6 +406,28 @@ function profilePage(state, p, opts) {
         <h2 class="mt">Your satchel — numbered editions</h2>
         ${heldItems.length ? `<ul class="items">${heldItems.join('')}</ul>` : '<p class="dim">Empty. Pit wins drop the pieces — the Mirror Wrap rarely; it is a legendary thing.</p>'}
         ${spentItems.length ? `<h3 class="boardh">Collection record — spent</h3><ul class="items spent">${spentItems.join('')}</ul>` : ''}`;
+  // THE DESCENT's gear shelf: worn pieces on their slots, the unworn shelf,
+  // and the GODFORGED treasures with their charges and their retired numbers.
+  const gearAll = p.gear || [];
+  const wornMap = game.wornGearMap(p);
+  const gearRows = game.GEAR_SLOTS.map(slot => {
+    const w = wornMap[slot];
+    const label = slot === 'body' ? 'Body relic' : TOOLS[slot].name;
+    return `<div class="gear-row"><span class="gear-slot">${label}</span> ${w
+      ? `<span class="tierbadge t-${w.tier.toLowerCase()}">${esc(w.name)} (${w.tier})</span> <form method="post" action="/api/gear/unwear" class="inlineform"><input type="hidden" name="slot" value="${slot}"><button class="ghostbtn" type="submit">Unwear</button></form>`
+      : '<span class="dim">bare</span>'}</div>`;
+  }).join('');
+  const unworn = gearAll.filter(g => !g.worn && g.tier !== 'GODFORGED');
+  const unwornRows = unworn.map(g => `<li class="gearline t-${g.tier.toLowerCase()}"><strong>${esc(g.name)}</strong> <span class="tierbadge t-${g.tier.toLowerCase()}">${g.tier}</span>${g.serial ? ` No. ${g.serial}` : ''} · ${g.slot === 'body' ? 'body relic' : TOOLS[g.slot].name}<br><span class="dim">${game.gearLine(g).map(esc).join(' · ')}</span> <form method="post" action="/api/gear/wear" class="inlineform"><input type="hidden" name="gearId" value="${g.id}"><button class="ghostbtn" type="submit">Wear it</button></form></li>`).join('');
+  const godRows = gearAll.filter(g => g.tier === 'GODFORGED').map(g => `<li class="gearline t-godforged"><strong>${esc(g.name)} No. ${g.serial}</strong> <span class="tierbadge t-godforged">GODFORGED</span> · ${esc(game.KEEPER_SIGNATURE)}<br><span class="dim">${esc(game.GODFORGED[g.god] ? game.GODFORGED[g.god].line : '')}</span><br>${g.retired
+    ? '<span class="bad">SPENT OUT — its charges are gone; the number is retired and stays in your record.</span>'
+    : `<span>Charges: <strong>${g.charges}</strong> of ${g.chargesMax} — declare it at the Descent's door.</span>`}${g.firedLog && g.firedLog.length ? `<br><span class="dim">Fired: ${g.firedLog.map(fl => esc(fl.how)).join(' · ')}</span>` : ''}</li>`).join('');
+  const gearShelf = `
+        <h2 class="mt" id="satchel">The gear shelf — loot of the Descent</h2>
+        ${gearRows}
+        ${unworn.length ? `<h3 class="boardh">In the satchel, unworn</h3><ul class="items">${unwornRows}</ul>` : '<p class="dim">No unworn gear on the shelf. What the depths drop, you keep — <a href="/descent">delve</a> to fill it.</p>'}
+        ${godRows ? `<h3 class="boardh">GODFORGED treasures</h3><ul class="items">${godRows}</ul>` : ''}
+        <p class="dim">Gear swaps happen here, between runs — never mid-delve. Your worn gear is your build: it rides your house fights and your Pit devil too, and your devil's card shows it. The Mirror Wrap and the Anchor Stitch are Pit treasures — they do not ride the Descent. Second Hearts and Stillbells are declared at the Descent's door.</p>`;
   const body = `
   <section class="profile">
     <div class="p-head">
@@ -414,6 +459,7 @@ function profilePage(state, p, opts) {
           <button type="submit">Save</button>
         </form>
         ${inventory}
+        ${gearShelf}
       </div>
       <div class="panel">
         <h2>Your devil — standing in <a href="/pit">the Pit</a></h2>
@@ -490,7 +536,15 @@ const VERDICT_TITLES = {
   trace: 'CAUGHT — TRACE COMPLETE',
   void: 'BOUT VOIDED'
 };
-function verdictTitle(v) { return VERDICT_TITLES[v.endReason] || (v.result === 'win' ? 'THE GATE BREACHED' : 'TURNED BACK'); }
+function verdictTitle(v) {
+  if (v.mode === 'descent') {
+    if (v.endReason === 'death') return 'THE DARK KEPT YOU';
+    if (v.endReason === 'ascend') return 'YOU ASCENDED — THE HAUL IS YOURS';
+    if (v.endReason === 'void') return 'RUN VOIDED';
+    return 'TURNED BACK FROM THE DEEP';
+  }
+  return VERDICT_TITLES[v.endReason] || (v.result === 'win' ? 'THE GATE BREACHED' : 'TURNED BACK');
+}
 
 function verdictPage(state, v, me) {
   const win = v.result === 'win';
@@ -502,6 +556,11 @@ function verdictPage(state, v, me) {
   const comboLine = fs && fs.combos && fs.combos.length
     ? `<p class="v-combos">Combos landed: ${fs.combos.map(c => ({ 'mark-drown': 'MARK & DROWN', 'cold-trail': 'COLD TRAIL', 'open-window': 'OPEN WINDOW' }[c] || c)).join(' · ')}</p>` : '';
   const pitLine = v.mode === 'pit' ? `<p class="v-pit">⚔ A Pit fight against <strong>${esc(v.devilName || 'a fighter')}</strong>'s devil.${v.result === 'win' ? ` Bounty taken: <strong>${v.bountyWon || 0} pts</strong>.` : ''}${v.feints ? ` It showed ${esc(v.feints)} Mirage phantom${v.feints === 1 ? '' : 's'}.` : ''}${v.morphed ? ' Its armor <strong>morphed</strong> mid-fight — old lessons shed, rhythm changed.' : ''}</p>` : '';
+  const descentLine = v.mode === 'descent' && v.descent ? `<div class="v-descent">
+      <p>🕯 A Descent run: <strong>${v.descent.depthsCleared}</strong> depths cleared · deepest reached <strong>Depth ${v.descent.deepest}</strong> · score <strong>${v.descent.score}</strong> · bosses slain <strong>${v.descent.bossesSlain}</strong>.</p>
+      ${v.descent.banked && v.descent.banked.length ? `<p>Banked into the satchel (haul value ${v.descent.haulValue}): ${v.descent.banked.map(bp => `<span class="tierbadge t-${bp.tier.toLowerCase()}">${esc(bp.name)} (${bp.tier}${bp.serial ? ' No. ' + bp.serial : ''})</span>`).join(' ')}</p>` : `<p>Nothing banked — the haul was empty when the run ended.</p>`}
+      ${v.descent.lost && v.descent.lost.length ? `<p class="bad">Left in the dark: ${v.descent.lost.map(bp => `${esc(bp.name)} (${bp.tier})`).join(' · ')} — death takes the unbanked STURDY and RARE. EPIC and above always come home.</p>` : ''}
+    </div>` : '';
   const dropLines = (v.drops || []).map(d => {
     const it = game.ITEMS[d.item];
     if (!it) return '';
@@ -531,6 +590,7 @@ function verdictPage(state, v, me) {
       ${xpLine}
       ${comboLine}
       ${pitLine}
+      ${descentLine}
       ${gearLines}
       ${dropLines}
       ${v.storm ? '<p class="v-storm">⚡ Storm verdict — points paid double under the storm.</p>' : ''}
@@ -562,6 +622,123 @@ function challengePage(state, owner, me) {
     </div>
   </section>`;
   return shell('A Challenge', body, me);
+}
+
+// ---- THE DESCENT -------------------------------------------------------------
+// A gothic-cathedral delve beneath the arena: deep blacks, ember red, gold.
+// Same referee, same deck — but the dark down here keeps what it catches.
+function descentPage(state, me) {
+  if (state.config.frozen) return shell('Frozen', maintenanceCard(), me);
+  const dtally = state.descent || { runs: 0, deaths: 0, ascents: 0, turned: 0, bossesSlain: 0, legendaries: 0, godforged: 0, depthsCleared: 0 };
+  const dplayers = Object.values(state.players).filter(x => x.email && x.descent);
+  const drec = x => x.descent || { deepest: 0, bestScore: 0, bestHaul: 0 };
+  const boardList = (key, fmt) => dplayers.filter(x => drec(x)[key] > 0)
+    .sort((a, b) => drec(b)[key] - drec(a)[key]).slice(0, 5)
+    .map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${fmt(drec(p)[key])}</span></a></li>`).join('')
+    || '<li class="dim">No mark set yet.</li>';
+  const boards = `
+    <div class="panel descent-boards">
+      <h2>The delve boards</h2>
+      <p class="dim">${dtally.runs} runs · ${dtally.depthsCleared} depths cleared · ${dtally.bossesSlain} bosses slain · ${dtally.deaths} deaths in the dark · ${dtally.legendaries} LEGENDARY pieces banked · <strong>${dtally.godforged || 0} GODFORGED in the world</strong>.</p>
+      <h3 class="boardh">Deepest depth</h3><ul class="board">${boardList('deepest', v => 'Depth ' + v)}</ul>
+      <h3 class="boardh">Highest score</h3><ul class="board">${boardList('bestScore', v => v + ' pts')}</ul>
+      <h3 class="boardh">Richest haul banked</h3><ul class="board">${boardList('bestHaul', v => '' + v)}</ul>
+    </div>`;
+  const hero = `
+    <div class="descent-hero">
+      <div class="descent-arch" aria-hidden="true">⛪</div>
+      <h1>THE DESCENT</h1>
+      <p class="lede">Beneath the arena there are stairs, and at the bottom of the stairs there is loot, and between you and the loot there is the Twin — on her home ground, learning your build as you go.</p>
+      <p class="dim">Crack each depth's gate and choose: <strong>descend</strong> for better drops and a meaner dark, or <strong>ascend</strong> and bank what you carry. Your integrity and your Trace carry across the whole run. Bosses guard every third depth and pay the best loot in the house; every fifth depth is a Vault — no gate, no strikes, only fleeing shapes and drop rolls. Death takes your unbanked STURDY and RARE pieces; EPIC, LEGENDARY and GODFORGED always come home. Solo and asynchronous, server-refereed like every bout here — no live PvP, and the loot counts on this page are the real books.</p>
+      <p class="dim">And she is learning <em>you</em>, specifically: lean on a tool — above all a LEGENDARY one — and the deeper you go, the more she scrambles it on sight. Stated plainly, like everything in this house.</p>
+    </div>`;
+  if (!me || !me.email) {
+    const body = `<section class="descent-wrap">${hero}
+      <div class="panel"><h2>The door is members-only</h2>
+      <p>The Descent keeps what you find — and keeping requires a satchel, and a satchel requires a name. <a href="/signup">Claim your profile</a> and the stairs are yours. Guests may read the boards:</p></div>
+      ${boards}</section>`;
+    return shell('The Descent', body, me);
+  }
+  const rec = me.descent || { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 };
+  const stock = me.itemStock || {};
+  const decl = [];
+  if ((stock.secondheart || []).length) {
+    decl.push(`<label class="check itemopt epic"><input type="checkbox" id="item-heart"> 💔 Declare <strong>THE SECOND HEART</strong> <span class="rarity epic">EPIC</span> — yours: ${stock.secondheart.map(n => 'No. ' + n).join(', ')}. Once per run, the blow that would end you breaks it instead. Unbroken, it returns.</label>`);
+  }
+  if ((stock.stillbell || []).length) {
+    decl.push(`<label class="check itemopt epic"><input type="checkbox" id="item-bell"> 🔔 Declare <strong>THE STILLBELL</strong> <span class="rarity epic">EPIC</span> — yours: ${stock.stillbell.map(n => 'No. ' + n).join(', ')}. Ring it mid-depth and the Trace cannot rise for 12 seconds. Unrung, it returns.</label>`);
+  }
+  const godPieces = (me.gear || []).filter(g => g.tier === 'GODFORGED');
+  const godUsable = godPieces.filter(g => !g.retired && g.charges > 0);
+  if (godUsable.length) {
+    decl.push(`<label class="itemopt godopt">✦ Declare one <strong>GODFORGED</strong> treasure — charges are spent only when its power fires:
+      <select id="god-select"><option value="">— carry none —</option>${godUsable.map(g => `<option value="${g.id}">${esc(g.name)} No. ${g.serial} — ${g.charges} charge${g.charges === 1 ? '' : 's'}</option>`).join('')}</select></label>`);
+  } else if (godPieces.length) {
+    decl.push('<p class="dim">✦ Your GODFORGED treasures are spent out — their numbers rest in your collection record.</p>');
+  }
+  const worn = game.wornGearMap(me);
+  const wornList = game.GEAR_SLOTS.filter(s => worn[s]).map(s => worn[s]);
+  const wornLine = wornList.length
+    ? `<p class="wornline">Your build going down: ${wornList.map(g => `<span class="tierbadge t-${g.tier.toLowerCase()}">${esc(g.name)} · ${g.slot === 'body' ? 'Body' : TOOLS[g.slot].name} (${g.tier})</span>`).join(' ')} <span class="dim">— swap gear at <a href="/profile#satchel">your satchel</a>, between runs.</span></p>`
+    : '<p class="dim">Your tools go down bare — no gear worn. What the depths drop, you keep; wear it at <a href="/profile#satchel">your satchel</a>.</p>';
+  const body = `
+  <section class="descent-wrap">
+    ${hero}
+    ${bannersHtml(state)}
+    <div class="descent-record">
+      <div><strong>${rec.runs}</strong><span>runs</span></div>
+      <div><strong>${rec.deepest ? 'Depth ' + rec.deepest : '—'}</strong><span>deepest</span></div>
+      <div><strong>${rec.bestScore}</strong><span>best score</span></div>
+      <div><strong>${rec.bestHaul}</strong><span>richest haul</span></div>
+      <div><strong>${rec.bossesSlain}</strong><span>bosses slain</span></div>
+    </div>
+    <div class="hud">
+      <div class="hudcell"><label>GATE</label><div class="bar hp"><i id="hpbar"></i></div><span id="hptext">100</span></div>
+      <div class="hudcell"><label>INTEGRITY</label><div class="bar int"><i id="intbar"></i></div><span id="inttext">100</span></div>
+      <div class="hudcell timer"><label>TIME</label><span id="clock">2:00</span></div>
+      <div class="hudcell"><label>ENERGY</label><div class="bar en"><i id="enbar"></i></div><span id="entext">100</span></div>
+      <div class="hudcell"><label>TRACE</label><div class="bar trace" id="tracewrap"><i id="tracebar"></i></div><span id="tracetext">0%</span></div>
+    </div>
+    <div class="runline" id="runline">Depth — · Score 0 · Carrying nothing</div>
+    <div class="stage descent-stage">
+      <canvas id="gate" width="900" height="560"></canvas>
+      <div id="lootlayer" class="lootlayer"></div>
+      <div id="bossplate" class="bossplate hidden"></div>
+      <div id="depthbanner" class="depthbanner hidden"></div>
+      <div id="gatechoice" class="gatechoice hidden">
+        <h2>THE GATE STANDS OPEN</h2>
+        <p id="gatechoice-text">The way down is darker and richer. The way up banks everything you carry.</p>
+        <div class="gatechoice-btns">
+          <button id="descend-btn" class="fightbtn descend" type="button">▼ DESCEND DEEPER</button>
+          <button id="ascend-btn" class="fightbtn ascend" type="button">▲ ASCEND &amp; BANK</button>
+        </div>
+      </div>
+      <div id="winframe" class="winframe hidden"><span id="winframe-label">OPEN WINDOW ×2</span><i id="winframe-bar"></i></div>
+      <div id="stage-msg" class="stage-msg">
+        <h2>The stairs are waiting, ${esc(me.displayName || 'fighter')}.</h2>
+        <p>Your full Command Deck goes down with you — tool pods, abilities, the parry plate — plus whatever your tools are wearing. Declare your treasures, then take the first step.</p>
+        ${wornLine}
+        ${decl.length ? `<div class="itempanel"><h3>Declared at the door — spent only as the design says</h3>${decl.join('')}</div>` : ''}
+        <button id="startbtn" class="fightbtn">▼ BEGIN THE DESCENT</button>
+        <p class="dim">A run abandoned from this door banks its haul like an ascent — the Keeper is not cruel, but the dark keeps its own ledger below.</p>
+      </div>
+      <div id="verdict" class="verdict hidden"></div>
+    </div>
+    <div id="twinread" class="twinread">The dark is reading you…</div>
+    <button id="parrybtn" class="parrybtn" type="button" disabled><span class="parry-charge" id="parry-charge"></span>⚡ PARRY<span>tap when it winds up — or tap the optic, or hit SPACE</span></button>
+    <div class="kit" id="kit"></div>
+    <div class="kit abilities" id="abilities"></div>
+    <div class="haulfeed panel"><h2>Carried haul — unbanked until you ascend or a boss falls</h2><ul id="haulfeed"><li class="dim">Empty hands. The depths provide.</li></ul>
+    <p><button id="abandonbtn" class="ghostbtn hidden" type="button">Abandon the run — ascend with what you carry</button></p></div>
+    ${boards}
+    <div class="arena-foot">
+      <span>Bosses stand at Depths 3, 6, 9, 12 and onward — the Captor, the Accountant, the Mirror, the Undertaker, and then they come again, deeper. Vaults open at Depths 5, 10, 15… GODFORGED treasures fall only from bosses at Depth 9 and deeper, at a few percent — ${dtally.godforged || 0} exist in the world as of this page.</span>
+      <button id="mutebtn" class="ghostbtn" type="button">Sound: on</button>
+    </div>
+  </section>
+  <script>window.TA_DESCENT = true;</script>
+  <script src="/js/descent.js"></script>`;
+  return shell('The Descent', body, me);
 }
 
 function deckPage(state, opts) {
@@ -736,4 +913,4 @@ function deckPage(state, opts) {
   return shell('Arena Deck', body, null);
 }
 
-module.exports = { esc, shell, landing, arenaPage, authPage, profilePage, fighterPage, webPage, verdictPage, challengePage, deckPage, maintenanceCard, pitPage, devilCardHtml };
+module.exports = { esc, shell, landing, arenaPage, authPage, profilePage, fighterPage, webPage, verdictPage, challengePage, deckPage, maintenanceCard, pitPage, devilCardHtml, descentPage };

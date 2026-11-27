@@ -301,6 +301,11 @@ function effectiveStats(state, player, armorMap, opts) {
   opts = opts || {};
   const tools = {};
   const mults = {}, multsPost = {};
+  // THE DESCENT's loot, worn: gear modifies the dealt stats here, server-side,
+  // so the referee validates geared fights exactly like any other — and the
+  // same build rides into house fights and the Pit (it IS the fighter's build).
+  const gear = wornGearMap(player);
+  const bodyMods = gear.body ? gearMods(gear.body) : null;
   for (const id of TOOL_IDS) {
     const t = TOOLS[id];
     let dmg = t.dmg, dot = t.dot || 0, cd = t.cooldown, cost = t.cost;
@@ -310,8 +315,17 @@ function effectiveStats(state, player, armorMap, opts) {
     if (has(player, 'vec3')) { dmg *= 1.12; dot *= 1.12; }
     if (has(player, 'spd1')) cd *= 0.85;
     if (has(player, 'spd3')) cd *= 0.85;
+    if (bodyMods && bodyMods.cheap) cost = Math.max(1, Math.round(cost * (1 - bodyMods.cheap)));
     const parts = familiarityParts(state, player, id, opts.famShapes || null);
-    const fam = Math.min(0.75, parts.global + parts.personal);
+    const worn = gear[id] || null;
+    if (worn && id === 'probe') {
+      // A Probe lens that dulls the lesson: personal familiarity grows slower.
+      const fs = affixValue(worn, 'famshield');
+      if (fs) parts.personal *= (1 - fs);
+    }
+    // The Descent's Twin learns your BUILD: opts.buildFam adds raw familiarity
+    // against specific tools (a career habit, a LEGENDARY on your hand).
+    const fam = Math.min(0.75, parts.global + parts.personal + ((opts.buildFam && opts.buildFam[id]) || 0));
     const armor = Math.min(0.5, (armorMap && armorMap[id]) || 0);
     const globalArmor = Math.min(0.2, state.globalArmor[id] || 0);
     const mult = (1 - fam * 0.7) * (1 - armor) * (1 - globalArmor);
@@ -339,6 +353,39 @@ function effectiveStats(state, player, armorMap, opts) {
       entry.dotMorph = +(dot * multPost).toFixed(2);
       entry.famMorph = +famPost.toFixed(3);
     }
+    if (worn) {
+      // Worn gear, applied to the dealt entry. Percentages ride the same
+      // familiarity/armor math as everything else; flat fields (splash,
+      // trace burn, mark length) are read by the referee directly.
+      const m = gearMods(worn);
+      if (m.dmg) {
+        entry.dmg = +(entry.dmg * (1 + m.dmg)).toFixed(2);
+        entry.rawDmg = +(entry.rawDmg * (1 + m.dmg)).toFixed(2);
+        if (entry.dmgMorph !== undefined) entry.dmgMorph = +(entry.dmgMorph * (1 + m.dmg)).toFixed(2);
+      }
+      if (m.dot) {
+        entry.dot = +(entry.dot * (1 + m.dot)).toFixed(2);
+        if (entry.dotMorph !== undefined) entry.dotMorph = +(entry.dotMorph * (1 + m.dot)).toFixed(2);
+      }
+      if (m.graveChoir && id === 'whisper') {
+        entry.dot = +(entry.dot * 1.6).toFixed(2);
+        if (entry.dotMorph !== undefined) entry.dotMorph = +(entry.dotMorph * 1.6).toFixed(2);
+        entry.dotSecs = (entry.dotSecs || 0) + 2;
+      }
+      if (m.cd) entry.cooldown = Math.max(200, Math.round(entry.cooldown * (1 - m.cd)));
+      if (m.tracecut) entry.trace = Math.max(1, entry.trace - m.tracecut);
+      if (m.splash) entry.splash = m.splash;
+      if (m.mark) entry.markMs = Math.round(4000 * (1 + m.mark));
+      if (m.traceburn) entry.traceBurn = m.traceburn;
+      if (m.shed && id === 'decoy') entry.trace = entry.trace - m.shed;
+      if (m.silent) entry.silent = true;
+      if (m.twoEyes) entry.twoEyes = true;
+      if (m.secondGhost) entry.ghostStrike = 8;
+      if (m.ignite) entry.ignite = { dps: 1.5, secs: 4 };
+      entry.gear = { name: worn.name, tier: worn.tier, unique: worn.unique || null };
+    }
+    // THE CAPTOR'S PRIZE: a twinned tool strikes twice for the rest of the run.
+    if (opts.twinTool === id) entry.twin = true;
     tools[id] = entry;
   }
   // Ability pods: only the abilities this fighter's web actually carries.
@@ -346,7 +393,7 @@ function effectiveStats(state, player, armorMap, opts) {
   for (const aid of Object.keys(ABILITIES)) {
     const ab = ABILITIES[aid];
     if (!has(player, ab.node)) continue;
-    const entry = { name: ab.name, cost: ab.cost, cooldown: ab.cooldown, trace: ab.trace, color: ab.color, blurb: ab.blurb };
+    const entry = { name: ab.name, cost: bodyMods && bodyMods.cheap ? Math.max(1, Math.round(ab.cost * (1 - bodyMods.cheap))) : ab.cost, cooldown: ab.cooldown, trace: ab.trace, color: ab.color, blurb: ab.blurb };
     if (aid === 'overdrive') {
       const raw = ab.dmg * (has(player, 'vec3') ? 1.12 : 1);
       entry.dmg = +(raw * mults.flood).toFixed(2);
@@ -357,20 +404,25 @@ function effectiveStats(state, player, armorMap, opts) {
     if (aid === 'rapid') entry.windowMs = ab.windowMs;
     abilities[aid] = entry;
   }
+  const decoyLong = gear.decoy ? affixValue(gear.decoy, 'longlife') : 0;
   return {
     tools, abilities,
-    gateHp: GATE_HP,
+    gateHp: opts.gateHp || GATE_HP,
     gateRegen: +(GATE_REGEN * effectiveAggression(state) * (has(player, 'pat2') ? 0.8 : 1)).toFixed(2),
     energyMax: ENERGY_MAX + (has(player, 'spd3') ? 20 : 0),
     energyRegen: +(ENERGY_REGEN * (has(player, 'spd2') ? 1.3 : 1)).toFixed(2),
-    roundMs: ROUND_MS + (has(player, 'pat3') ? 25000 : 0),
-    decoyCrit: has(player, 'dec3') ? 0.9 : 0.6,
+    roundMs: opts.roundMs || (ROUND_MS + (has(player, 'pat3') ? 25000 : 0)),
+    decoyCrit: (has(player, 'dec3') ? 0.9 : 0.6) + (decoyLong || 0),
     morph: opts.morph ? { shedKeep: MORPH.shedKeep, stitchTool: opts.stitchTool || null } : null,
+    // THE CAPTOR (Descent boss depths): { tool, at } — the referee refuses
+    // the seized tool from `at` on; the client mirrors the same snatch.
+    seized: opts.seized || null,
+    gear: gearSummary(gear),
     combat: {
-      playerHp: PLAYER_HP,
+      playerHp: PLAYER_HP + (bodyMods ? bodyMods.plating : 0),
       parryCost: PARRY.cost, parryCooldown: PARRY.cooldown,
-      traceCool: TRACE_COOL, traceMax: TRACE_MAX,
-      windupMs: STRIKE.windupMs, vulnMs: STRIKE.vulnMs, vulnMult: STRIKE.vulnMult,
+      traceCool: +(TRACE_COOL + (bodyMods ? bodyMods.coolant : 0)).toFixed(2), traceMax: TRACE_MAX,
+      windupMs: STRIKE.windupMs + (bodyMods ? bodyMods.parry : 0), vulnMs: STRIKE.vulnMs, vulnMult: STRIKE.vulnMult,
       scrambleMs: STRIKE.scrambleMs, strikeDmg: STRIKE.dmg
     }
   };
@@ -386,7 +438,7 @@ function extractPatterns(actions) {
   let decoyUntil = -1;
   // a parry is a reflex, not a shape — an ability is a stance, not a shape —
   // and a rung Stillbell is an item spent, not a shape either
-  const acts = actions.filter(a => a.tool !== 'parry' && a.tool !== 'bell' && !String(a.tool || '').startsWith('ability:'));
+  const acts = actions.filter(a => a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:'));
   for (let i = 0; i < acts.length; i++) {
     const a = acts[i];
     if (a.tool === 'decoy') decoyUntil = a.t + 5000;
@@ -527,9 +579,17 @@ function simulateRound(fight, actions, durationMs) {
   const postMorph = (fight.postMorph || []).map(s => ({ offset: s.offset, kind: s.kind, tool: s.tool, parried: false, eaten: false }));
   const allStrikes = strikes.concat(postMorph);
   const morphCfg = stats.morph || null;
+  const combat = stats.combat || {};
+  const maxIntegrity = combat.playerHp || PLAYER_HP;
+  const windupMs = combat.windupMs || STRIKE.windupMs;
+  const traceCool = combat.traceCool || TRACE_COOL;
   const S = {
-    energy: stats.energyMax, gateHp: stats.gateHp, integrity: PLAYER_HP,
-    trace: 0, tracePeak: 0, markUntil: -1, critNext: 0,
+    energy: stats.energyMax, gateHp: stats.gateHp,
+    // THE DESCENT: integrity and trace CARRY across a run — the server deals
+    // the carried values into the dealt combat block, depth after depth.
+    integrity: combat.startIntegrity != null ? combat.startIntegrity : maxIntegrity,
+    trace: combat.startTrace || 0, tracePeak: combat.startTrace || 0,
+    markUntil: -1, markCharges: 0, critNext: 0,
     lastUse: {}, lastCd: {}, lockoutUntil: {}, dots: [],
     parries: 0, strikesTaken: 0, strikeDamage: 0, dmgTotal: 0, vulnBonus: 0,
     vulnFrom: -1, vulnUntil: -1, outcome: null,
@@ -542,7 +602,11 @@ function simulateRound(fight, actions, durationMs) {
     // Declared consumables — the server dealt these booleans from real
     // inventory at fight start; the referee enforces them like any claim.
     heartReady: !!fight.heart, heartUsed: false,
-    bellReady: !!fight.bell, bellRung: false, bellUntil: -1
+    bellReady: !!fight.bell, bellRung: false, bellUntil: -1,
+    // GODFORGED declarations ride the fight the same way: dealt by the
+    // server from a real charged treasure, enforced like any other claim.
+    mercyUsed: false, dawnUsed: false,
+    dawnReady: !!(fight.god && fight.god.power === 'seconddawn' && !fight.god.dawnUsed)
   };
   let cur = 0;
   function noteMorphCrossing() {
@@ -561,7 +625,7 @@ function simulateRound(fight, actions, durationMs) {
         return false;
       });
       if (!burning && S.gateHp > 0) S.gateHp = Math.min(stats.gateHp, S.gateHp + stats.gateRegen * dt);
-      S.trace = Math.max(0, S.trace - TRACE_COOL * dt);
+      S.trace = Math.max(0, S.trace - traceCool * dt);
       if (S.gateHp <= 0) { S.gateHp = 0; S.outcome = { result: 'win', endReason: 'breach', at: Math.round(cur) }; }
       else noteMorphCrossing();
     }
@@ -572,11 +636,29 @@ function simulateRound(fight, actions, durationMs) {
     if (amount > 0 && S.bellRung && t < S.bellUntil) return false;
     S.trace = Math.min(TRACE_MAX, Math.max(0, S.trace + amount));
     if (S.trace > S.tracePeak) S.tracePeak = S.trace;
-    if (S.trace >= TRACE_MAX) { S.outcome = { result: 'lose', endReason: 'trace', at: t }; return true; }
+    if (S.trace >= TRACE_MAX) {
+      // THE SECOND DAWN (GODFORGED): once per run, the catch does not take —
+      // the Trace wipes clean and the fighter stands at half integrity.
+      if (S.dawnReady && !S.dawnUsed) {
+        S.dawnUsed = true; S.trace = 0;
+        S.integrity = Math.max(S.integrity, Math.ceil(maxIntegrity / 2));
+        return false;
+      }
+      S.outcome = { result: 'lose', endReason: 'trace', at: t }; return true;
+    }
     return false;
   }
   function doAction(a) {
     const t = a.t;
+    // ---- THE KEEPER'S MERCY (GODFORGED): declared or the claim is forged --
+    if (a.tool === 'mercy') {
+      const g = fight.god;
+      if (!g || g.power !== 'keepersmercy' || g.mercyUsed) return 'mercy not declared';
+      if (S.mercyUsed) return 'mercy already spent';
+      S.mercyUsed = true;
+      S.trace = 0;
+      return null;
+    }
     // ---- THE STILLBELL: rung from the deck, once, only if declared ----
     if (a.tool === 'bell') {
       if (!S.bellReady) return 'bell not declared';
@@ -600,11 +682,14 @@ function simulateRound(fight, actions, durationMs) {
       if (id === 'ghost') { S.ghostCharges = ab.charges || 3; return null; }
       if (id === 'secondwind') {
         S.secondWindUsed = true;
-        S.integrity = Math.min(PLAYER_HP, S.integrity + (ab.heal || 30));
+        S.integrity = Math.min(maxIntegrity, S.integrity + (ab.heal || 30));
         return null;
       }
       if (id === 'rapid') { S.rapidUntil = t + (ab.windowMs || 8000); return null; }
       if (id === 'overdrive') {
+        // OVERDRIVE is a Flood strike wearing a bigger coat: if the Captor
+        // holds your Flood, he holds this too.
+        if (stats.seized && stats.seized.tool === 'flood' && t >= stats.seized.at) return 'tool seized';
         let dmg = (S.morphed && ab.dmgMorph !== undefined) ? ab.dmgMorph : ab.dmg;
         if (S.critNext > 0) { dmg *= (1 + S.critNext); S.critNext = 0; }
         if (t >= S.vulnFrom && t <= S.vulnUntil) {
@@ -626,19 +711,22 @@ function simulateRound(fight, actions, durationMs) {
       if (S.energy < -12) return 'energy overdrawn';
       S.lastUse.parry = t;
       const inWindow = s => !s.parried && !s.eaten && s.at !== undefined &&
-        t >= s.at - STRIKE.windupMs && t <= s.at;
+        t >= s.at - windupMs && t <= s.at;
       const target = allStrikes.find(s => s.kind === 'haymaker' && inWindow(s));
       if (target) { target.parried = true; S.parries++; return null; }
       // MIRAGE: a parry thrown at a FEINT's telegraph is legal — and wasted.
       // The phantom eats the reflex; no window opens. A parry claimed where
       // no telegraph of either kind stood is still a forgery.
       const feint = strikes.find(s => s.kind === 'feint' && !s.parried && !s.eaten &&
-        t >= s.at - STRIKE.windupMs && t <= s.at);
+        t >= s.at - windupMs && t <= s.at);
       if (feint) { feint.parried = true; S.parryWhiffs++; return null; }
       return 'parry outside its window';
     }
     const tool = stats.tools[a.tool];
     if (!tool) return 'unknown tool';
+    // THE CAPTOR'S SEIZURE: from the dealt moment on, the tool is in his
+    // hands, not yours. A log that swings it anyway is a forgery.
+    if (stats.seized && a.tool === stats.seized.tool && t >= stats.seized.at) return 'tool seized';
     if (S.lastUse[a.tool] !== undefined) {
       const cdInForce = S.lastCd[a.tool] !== undefined ? S.lastCd[a.tool] : tool.cooldown;
       if (t - S.lastUse[a.tool] < cdInForce * 0.8) return 'cooldown violated';
@@ -658,18 +746,37 @@ function simulateRound(fight, actions, durationMs) {
       S.lastDecoyAt = t;
       // Burned defensively during a wind-up, a decoy eats the strike whole.
       const pending = allStrikes.find(s => s.kind === 'haymaker' && !s.parried && !s.eaten &&
-        s.at !== undefined && t >= s.at - STRIKE.windupMs && t <= s.at);
+        s.at !== undefined && t >= s.at - windupMs && t <= s.at);
       if (pending) pending.eaten = true;
+      // THE SECOND GHOST (a LEGENDARY decoy's unique power): before it
+      // fades, the decoy strikes once — a real hit, dealt in the stats.
+      if (tool.ghostStrike) {
+        S.gateHp -= tool.ghostStrike;
+        S.dmgTotal += tool.ghostStrike;
+        if (S.gateHp <= 0) { S.gateHp = 0; S.outcome = { result: 'win', endReason: 'breach', at: t }; }
+        else noteMorphCrossing();
+      }
+      // A TWINNED decoy dumps its trace twice — the Captor's prize, doubled.
+      if (!S.outcome && tool.twin) { if (hearTrace(tool.trace || 0, t)) return null; }
       return null;
     }
     let dmg = (S.morphed && tool.dmgMorph !== undefined) ? tool.dmgMorph : tool.dmg;
     if (S.critNext > 0) { dmg *= (1 + S.critNext); S.critNext = 0; }
     if (a.tool === 'flood' && t - S.lastProbeAt <= COMBO.markDrownMs) {
       // MARK & DROWN: the combo pays +50% and eats the mark.
-      dmg *= COMBO.markDrownMult; S.markUntil = -1;
+      dmg *= COMBO.markDrownMult; S.markUntil = -1; S.markCharges = 0;
       if (!S.combos.includes('mark-drown')) S.combos.push('mark-drown');
-    } else if (a.tool !== 'probe' && t < S.markUntil) { dmg *= 1.3; S.markUntil = -1; }
-    if (a.tool === 'probe') { S.markUntil = t + 4000; S.lastProbeAt = t; }
+    } else if (a.tool !== 'probe' && t < S.markUntil) {
+      dmg *= 1.3;
+      // TWO EYES (a LEGENDARY probe's unique power): the mark covers two
+      // strikes, not one — charges dealt in the stats, spent one at a time.
+      if (--S.markCharges <= 0) S.markUntil = -1;
+    }
+    if (a.tool === 'probe') {
+      S.markUntil = t + (tool.markMs || 4000);
+      S.markCharges = tool.twoEyes ? 2 : 1;
+      S.lastProbeAt = t;
+    }
     if (t >= S.vulnFrom && t <= S.vulnUntil) {
       const bonus = dmg * (STRIKE.vulnMult - 1);
       S.vulnBonus += bonus; dmg += bonus;
@@ -680,14 +787,38 @@ function simulateRound(fight, actions, durationMs) {
     if (a.tool === 'whisper') {
       const dps = (S.morphed && tool.dotMorph !== undefined) ? tool.dotMorph : tool.dot;
       S.dots.push({ until: t + (tool.dotSecs || 0) * 1000, dps });
+      // A geared Whisper burns trace off the books as it lands.
+      if (tool.traceBurn) S.trace = Math.max(0, S.trace - tool.traceBurn);
       // COLD TRAIL: a Whisper on a fresh Decoy's heels dumps trace too.
       if (t - S.lastDecoyAt <= COMBO.coldTrailMs) {
         S.trace = Math.max(0, S.trace - COMBO.coldTrailDump);
         if (!S.combos.includes('cold-trail')) S.combos.push('cold-trail');
       }
     }
+    // EMBERBRAND (a LEGENDARY flood's unique power): the strike ignites.
+    if (a.tool === 'flood' && tool.ignite) {
+      S.dots.push({ until: t + tool.ignite.secs * 1000, dps: tool.ignite.dps });
+    }
+    // A geared Flood splashes onto a second shape as it lands.
+    if (a.tool === 'flood' && tool.splash) { S.gateHp -= tool.splash; S.dmgTotal += tool.splash; }
     if (S.gateHp <= 0) { S.gateHp = 0; S.outcome = { result: 'win', endReason: 'breach', at: t }; }
     else noteMorphCrossing();
+    if (!S.outcome && tool.twin) {
+      // TWINNED (the Captor's prize, won back): the strike lands a second
+      // time — full base damage, and the trace hears it too. Double
+      // everything: damage, burn, and the lesson the Twin takes home.
+      let dmg2 = (S.morphed && tool.dmgMorph !== undefined) ? tool.dmgMorph : tool.dmg;
+      S.gateHp -= dmg2;
+      S.dmgTotal += dmg2;
+      if (a.tool === 'whisper') {
+        const dps2 = (S.morphed && tool.dotMorph !== undefined) ? tool.dotMorph : tool.dot;
+        S.dots.push({ until: t + (tool.dotSecs || 0) * 1000, dps: dps2 });
+      }
+      if (a.tool === 'flood' && tool.splash) { S.gateHp -= tool.splash; S.dmgTotal += tool.splash; }
+      if (S.gateHp <= 0) { S.gateHp = 0; S.outcome = { result: 'win', endReason: 'breach', at: t }; }
+      else noteMorphCrossing();
+      if (!S.outcome && hearTrace(tool.trace || 0, t)) return null;
+    }
     return null;
   }
   function doStrike(s, t) {
@@ -699,11 +830,15 @@ function simulateRound(fight, actions, durationMs) {
     } else if (s.kind === 'glance') {
       S.integrity -= STRIKE.dmg.glance; S.strikesTaken++; S.strikeDamage += STRIKE.dmg.glance;
       const tool = stats.tools[s.tool] ? s.tool : 'probe';
-      const ready = S.lastUse[tool] !== undefined ? S.lastUse[tool] + stats.tools[tool].cooldown : t;
-      // A devil's GUARD (its owner's parry habits) stretches the scramble —
-      // the duration rides the dealt stats, never a constant.
-      const scrMs = (stats.combat && stats.combat.scrambleMs) || STRIKE.scrambleMs;
-      S.lockoutUntil[tool] = Math.max(ready, t) + scrMs;
+      // SILENT (a geared Whisper's affix): a glance cannot scramble what it
+      // cannot hear. The integrity cost still lands — only the lockout dies.
+      if (!(stats.tools[tool] && stats.tools[tool].silent)) {
+        const ready = S.lastUse[tool] !== undefined ? S.lastUse[tool] + stats.tools[tool].cooldown : t;
+        // A devil's GUARD (its owner's parry habits) stretches the scramble —
+        // the duration rides the dealt stats, never a constant.
+        const scrMs = (stats.combat && stats.combat.scrambleMs) || STRIKE.scrambleMs;
+        S.lockoutUntil[tool] = Math.max(ready, t) + scrMs;
+      }
     } else {
       S.integrity -= STRIKE.dmg.clean; S.strikesTaken++; S.strikeDamage += STRIKE.dmg.clean;
     }
@@ -711,6 +846,9 @@ function simulateRound(fight, actions, durationMs) {
       // THE SECOND HEART: the first zeroing blow breaks the Heart instead —
       // the fighter stands back up at HEART_RESTORE and the fight goes on.
       if (S.heartReady && !S.heartUsed) { S.heartUsed = true; S.integrity = HEART_RESTORE; }
+      // THE SECOND DAWN (GODFORGED): once per run, death itself is refused —
+      // half integrity, Trace wiped clean.
+      else if (S.dawnReady && !S.dawnUsed) { S.dawnUsed = true; S.integrity = Math.ceil(maxIntegrity / 2); S.trace = 0; }
       else { S.integrity = 0; S.outcome = { result: 'lose', endReason: 'integrity', at: t }; }
     }
   }
@@ -760,7 +898,8 @@ function simulateRound(fight, actions, durationMs) {
     dmgTotal: +S.dmgTotal.toFixed(2), vulnBonus: +S.vulnBonus.toFixed(2),
     combos: S.combos, abilitiesUsed: S.abilitiesUsed, parryWhiffs: S.parryWhiffs,
     feintsShown: S.feintsShown, morphed: S.morphed, morphAt: S.morphAt,
-    heartUsed: S.heartUsed, bellRung: S.bellRung
+    heartUsed: S.heartUsed, bellRung: S.bellRung,
+    mercyUsed: S.mercyUsed, dawnUsed: S.dawnUsed
   };
 }
 
@@ -1013,6 +1152,406 @@ function settlePitFight(state, challenger, owner, fight, submission, sim, rng) {
   return verdict;
 }
 
+// ============================================================================
+// THE DESCENT — a Diablo-style delve beneath the Arena (Steven, 2026-11-27).
+// Solo depths against the house Twin. Cracked shapes and bosses drop GEAR —
+// rolled by the server from the depth seeds, worn by the fighter's tools,
+// kept in the satchel between runs. Integrity and Trace carry across a run;
+// at every cleared depth the fighter chooses: descend, or ascend and bank.
+// Death loses the unbanked STURDY/RARE pieces; EPIC and LEGENDARY always
+// bank. Everything settles through the same referee as every bout here.
+// ============================================================================
+const GEAR_SLOTS = ['flood', 'probe', 'whisper', 'decoy', 'body'];
+const GEAR_TIERS = ['STURDY', 'RARE', 'EPIC', 'LEGENDARY', 'GODFORGED'];
+const TIER_AFFIXES = { STURDY: 1, RARE: 2, EPIC: 3, LEGENDARY: 3 };
+const HAUL_VALUES = { STURDY: 10, RARE: 25, EPIC: 60, LEGENDARY: 150, GODFORGED: 400 };
+// ---- GODFORGED (Steven, 2026-11-27, mid-build addition) -------------------
+// One tier above LEGENDARY, and it barely exists: GODFORGED pieces drop ONLY
+// from bosses at Depth 9 and deeper, at a few percent — the books print the
+// true count of how many exist in the world. They are not worn; they are
+// treasures in the satchel, declared at a run's start like the Heart and the
+// Bell, and they carry CHARGES (1–3, dealt with the drop). A charge is spent
+// only when the power actually fires; a spent-out piece stays in the
+// collection forever, powerless, its number retired — the same provenance
+// law as every numbered edition in this house. Every power bends a rule
+// INSIDE the referee: a forged god-tier claim voids exactly like a forged
+// ability. The family stays small — five pieces, no more.
+const GODFORGED = {
+  unreadstrike: { name: 'THE UNREAD STRIKE', line: 'Declared for a run: one of your tools — the one the run leans on — becomes unreadable. Glances cannot scramble it, and its strikes teach the Twin nothing, all run long.' },
+  openbook:     { name: 'THE OPEN BOOK', line: 'Declared for a run: every telegraph stands open. Parry windows run wide — you see every blow coming, all run long.' },
+  keepersmercy: { name: "THE KEEPER'S MERCY", line: 'Declared for a run: once, mid-fight, call for mercy and the Trace rewinds to zero.' },
+  seconddawn:   { name: 'THE SECOND DAWN', line: 'Declared for a run: once, when a depth would end your run — gate, blade or Trace — you stand back up at half integrity with the Trace wiped clean.' },
+  doubleharvest:{ name: 'THE DOUBLE HARVEST', line: 'Declared for a run: the first depth that drops loot drops it twice over.' }
+};
+function godforgedChance(depth) {
+  if (depth < 9) return 0;
+  return Math.min(0.08, 0.04 + (depth - 9) * 0.002);
+}
+// Roll a GODFORGED treasure: a power from the family, 1–3 charges, and the
+// next numbered edition of that power — signed by the Keeper, unique forever.
+function rollGodforged(state, rng) {
+  state.gearSeq = state.gearSeq || {};
+  const ids = Object.keys(GODFORGED);
+  const power = ids[Math.floor(rng() * ids.length)];
+  const charges = 1 + Math.floor(rng() * 3);
+  const serial = (state.gearSeq[power] || 0) + 1;
+  state.gearSeq[power] = serial;
+  const inst = (state.gearSeq._inst || 0) + 1;
+  state.gearSeq._inst = inst;
+  return {
+    id: 'g' + inst, slot: 'god', tier: 'GODFORGED', god: power,
+    name: GODFORGED[power].name, affixes: [], unique: null, serial,
+    charges, chargesMax: charges, retired: false, firedLog: [],
+    worn: false, banked: false, at: Date.now()
+  };
+}
+// Spend one charge when a power fires. A piece at zero charges is retired:
+// it stays in the satchel's record, powerless, its number never re-issued.
+function spendGodCharge(player, pieceId, how) {
+  const piece = ((player && player.gear) || []).find(g => g.id === pieceId);
+  if (!piece || piece.tier !== 'GODFORGED' || piece.retired || !(piece.charges > 0)) return false;
+  piece.charges -= 1;
+  piece.firedLog = piece.firedLog || [];
+  piece.firedLog.push({ how: how || 'fired', at: Date.now() });
+  if (piece.charges <= 0) piece.retired = true;
+  return true;
+}
+// Affix pools per slot. kind drives the math in gearMods; min/max are the
+// server roll range; label renders the piece's card line. Fractions are
+// multipliers (0.12 = +12%); the rest are flat values in their own units
+// (trace points, damage, milliseconds, %/s of cooling).
+const AFFIX_POOLS = {
+  flood: [
+    { kind: 'dmg',      min: 0.08, max: 0.20, label: v => `Flood damage +${Math.round(v * 100)}%`, flavor: 'of Wrath' },
+    { kind: 'tracecut', min: 2,    max: 5,    label: v => `Flood trace −${v} per strike`, flavor: 'of Silence' },
+    { kind: 'cd',       min: 0.08, max: 0.18, label: v => `Flood cooldown −${Math.round(v * 100)}%`, flavor: 'of Haste' },
+    { kind: 'splash',   min: 2,    max: 5,    label: v => `Flood splashes +${v} onto a second shape`, flavor: 'of Embers' }
+  ],
+  probe: [
+    { kind: 'dmg',       min: 0.10, max: 0.25, label: v => `Probe damage +${Math.round(v * 100)}%`, flavor: 'of the Needle' },
+    { kind: 'mark',      min: 0.25, max: 0.60, label: v => `Marks last +${Math.round(v * 100)}% longer`, flavor: 'of the Long Look' },
+    { kind: 'famshield', min: 0.20, max: 0.45, label: v => `The Twin's familiarity with your Probe grows ${Math.round(v * 100)}% slower`, flavor: 'of Forgetting' },
+    { kind: 'cd',        min: 0.08, max: 0.18, label: v => `Probe cooldown −${Math.round(v * 100)}%`, flavor: 'of Haste' }
+  ],
+  whisper: [
+    { kind: 'dot',       min: 0.15, max: 0.35, label: v => `Whisper burn +${Math.round(v * 100)}%`, flavor: 'of the Slow Fire' },
+    { kind: 'traceburn', min: 3,    max: 7,    label: v => `Whisper burns ${v}% trace on strike`, flavor: 'of Ash' },
+    { kind: 'cd',        min: 0.08, max: 0.18, label: v => `Whisper cooldown −${Math.round(v * 100)}%`, flavor: 'of Haste' },
+    { kind: 'silent',    min: 1,    max: 1,    label: () => 'Silent: glances cannot scramble your Whisper', flavor: 'of Held Breath' }
+  ],
+  decoy: [
+    { kind: 'cd',       min: 0.08, max: 0.18, label: v => `Decoy cooldown −${Math.round(v * 100)}%`, flavor: 'of Haste' },
+    { kind: 'shed',     min: 4,    max: 9,    label: v => `Decoy sheds ${v}% more trace`, flavor: 'of Letting Go' },
+    { kind: 'longlife', min: 0.15, max: 0.30, label: v => `Decoy's next-strike bonus +${Math.round(v * 100)}% more`, flavor: 'of Patience' },
+    { kind: 'dmg',      min: 0.10, max: 0.20, label: v => `All strikes after a Decoy bite +${Math.round(v * 100)}% harder`, flavor: 'of the Open Door', unused: true }
+  ],
+  body: [
+    { kind: 'plating', min: 10,   max: 25,   label: v => `+${v} max integrity`, flavor: 'of the Wall' },
+    { kind: 'coolant', min: 0.3,  max: 0.8,  label: v => `Trace cools +${v.toFixed(1)}%/s faster`, flavor: 'of Cold Water' },
+    { kind: 'parry',   min: 150,  max: 350,  label: v => `Parry window +${v}ms wider`, flavor: 'of the Open Hand' },
+    { kind: 'cheap',   min: 0.08, max: 0.20, label: v => `Tools and abilities cost ${Math.round(v * 100)}% less energy`, flavor: 'of Thrift' }
+  ]
+};
+// The decoy 'dmg' affix above is flavor-only in the pool draft and is never
+// rolled (marked unused) — decoy pieces roll from the three working affixes.
+for (const slot of Object.keys(AFFIX_POOLS)) AFFIX_POOLS[slot] = AFFIX_POOLS[slot].filter(a => !a.unused);
+// LEGENDARY unique powers — one per slot, named, numbered, Keeper-signed.
+const GEAR_UNIQUES = {
+  flood:   { id: 'emberbrand',  name: 'EMBERBRAND',        line: 'Unique: your Floods ignite the gate — a slow burn rides every strike.' },
+  probe:   { id: 'twoeyes',     name: 'TWO EYES',          line: 'Unique: your Probe marks two shapes at once — the mark covers your next two strikes.' },
+  whisper: { id: 'gravechoir',  name: 'THE GRAVE CHOIR',   line: 'Unique: your Whisper burns 60% harder and two seconds longer.' },
+  decoy:   { id: 'secondghost', name: 'THE SECOND GHOST',  line: 'Unique: your Decoy strikes once — a real hit — before it fades.' },
+  body:    { id: 'keeperplate', name: "THE KEEPER'S PLATE", line: 'Unique: +15 more integrity and +0.4%/s more cooling, beyond its affixes.' }
+};
+const GEAR_FORMS = { flood: 'Brand', probe: 'Lens', whisper: 'Choir', decoy: 'Veil', body: 'Plate' };
+
+function affixValue(piece, kind) {
+  if (!piece || !piece.affixes) return 0;
+  return piece.affixes.filter(a => a.kind === kind).reduce((s, a) => s + a.value, 0);
+}
+// Aggregate a piece's affixes into the modifier set effectiveStats reads.
+function gearMods(piece) {
+  const m = { dmg: 0, dot: 0, cd: 0, tracecut: 0, splash: 0, mark: 0, famshield: 0,
+              traceburn: 0, shed: 0, longlife: 0, silent: false, plating: 0,
+              coolant: 0, parry: 0, cheap: 0, twoEyes: false, secondGhost: false,
+              ignite: false, graveChoir: false };
+  if (!piece) return m;
+  for (const a of piece.affixes || []) {
+    if (a.kind === 'silent') m.silent = true;
+    else if (m[a.kind] !== undefined) m[a.kind] += a.value;
+  }
+  if (piece.tier === 'LEGENDARY' && piece.unique) {
+    if (piece.unique === 'twoeyes') m.twoEyes = true;
+    if (piece.unique === 'secondghost') m.secondGhost = true;
+    if (piece.unique === 'emberbrand') m.ignite = true;
+    if (piece.unique === 'gravechoir') m.graveChoir = true;
+    if (piece.unique === 'keeperplate') { m.plating += 15; m.coolant += 0.4; }
+  }
+  return m;
+}
+function wornGearMap(player) {
+  const map = {};
+  for (const p of (player && player.gear) || []) if (p.worn && GEAR_SLOTS.includes(p.slot)) map[p.slot] = p;
+  return map;
+}
+function gearSummary(map) {
+  const out = {};
+  for (const slot of Object.keys(map || {})) {
+    const p = map[slot];
+    out[slot] = { name: p.name, tier: p.tier, unique: p.unique || null, serial: p.serial || null };
+  }
+  return out;
+}
+function gearLine(piece) {
+  const bits = (piece.affixes || []).map(a => a.label);
+  if (piece.unique) {
+    const u = Object.values(GEAR_UNIQUES).find(x => x.id === piece.unique);
+    if (u) bits.push(u.line);
+  }
+  return bits;
+}
+// Roll one gear piece. The rng is dealt by the server from the run/depth
+// seeds, so every drop is reproducible and referee-verifiable after the fact.
+function rollGearPiece(state, rng, opts) {
+  opts = opts || {};
+  state.gearSeq = state.gearSeq || {};
+  const slot = opts.slot || GEAR_SLOTS[Math.floor(rng() * GEAR_SLOTS.length)];
+  const tier = opts.tier || 'STURDY';
+  const pool = AFFIX_POOLS[slot].slice();
+  const affixes = [];
+  const n = TIER_AFFIXES[tier] || 1;
+  for (let i = 0; i < n && pool.length; i++) {
+    const idx = Math.floor(rng() * pool.length);
+    const def = pool.splice(idx, 1)[0];
+    const raw = def.min + rng() * (def.max - def.min);
+    const value = def.kind === 'silent' ? 1
+      : (def.max <= 1 ? +raw.toFixed(3) : Math.round(raw));
+    affixes.push({ kind: def.kind, value, label: def.label(value), flavor: def.flavor });
+  }
+  let unique = null, serial = null, name;
+  if (tier === 'LEGENDARY') {
+    const u = GEAR_UNIQUES[slot];
+    unique = u.id;
+    serial = (state.gearSeq[unique] || 0) + 1;
+    state.gearSeq[unique] = serial;
+    name = u.name;
+  } else {
+    const toolName = slot === 'body' ? 'Keeper' : TOOLS[slot].name;
+    name = toolName + ' ' + GEAR_FORMS[slot] + (affixes[0] && affixes[0].flavor ? ' ' + affixes[0].flavor : '');
+  }
+  const inst = (state.gearSeq._inst || 0) + 1;
+  state.gearSeq._inst = inst;
+  return { id: 'g' + inst, slot, tier, affixes, unique, serial, name, worn: false, banked: false, at: Date.now() };
+}
+function rollTier(rng, table) {
+  let r = rng();
+  for (const [tier, w] of table) { if (r < w) return tier; r -= w; }
+  return table[table.length - 1][0];
+}
+const DROP_TABLES = {
+  shape: [['STURDY', 0.68], ['RARE', 0.24], ['EPIC', 0.065], ['LEGENDARY', 0.015]],
+  elite: [['STURDY', 0.45], ['RARE', 0.38], ['EPIC', 0.14], ['LEGENDARY', 0.03]],
+  vault: [['STURDY', 0.60], ['RARE', 0.30], ['EPIC', 0.09], ['LEGENDARY', 0.01]]
+};
+function bossLegendaryChance(depth) { return Math.min(0.4, 0.18 + depth * 0.012); }
+function haulValue(pieces) { return (pieces || []).reduce((s, p) => s + (HAUL_VALUES[p.tier] || 0), 0); }
+// The death rule, in one place: EPIC and above always bank — the Keeper
+// is not cruel. Unbanked STURDY/RARE stay in the dark.
+function deathSplit(haul) {
+  const keep = [], lost = [];
+  for (const p of haul || []) (p.tier === 'EPIC' || p.tier === 'LEGENDARY' || p.tier === 'GODFORGED' ? keep : lost).push(p);
+  return { keep, lost };
+}
+function bankHaul(player, pieces) {
+  player.gear = player.gear || [];
+  for (const p of pieces || []) { p.banked = true; p.worn = false; player.gear.push(p); }
+  return (pieces || []).length;
+}
+function wearGear(player, gearId) {
+  const piece = ((player && player.gear) || []).find(g => g.id === gearId);
+  if (!piece) return 'no such piece in your satchel';
+  if (piece.tier === 'GODFORGED') return 'GODFORGED treasures are declared at the Descent\u2019s door, not worn';
+  for (const p of player.gear) if (p.slot === piece.slot) p.worn = false;
+  piece.worn = true;
+  return null;
+}
+function unwearGear(player, slot) {
+  if (!GEAR_SLOTS.includes(slot)) return 'no such slot';
+  for (const p of (player && player.gear) || []) if (p.slot === slot) p.worn = false;
+  return null;
+}
+
+// ---- Descent depths, bosses, schedules ------------------------------------
+const BOSSES = [
+  { id: 'captor',     name: 'THE CAPTOR',     line: 'He collects what you lean on. Mid-fight he will seize your most-used tool of this run — crack his gate to win it back TWINNED for the rest of the run, or descend without it.' },
+  { id: 'accountant', name: 'THE ACCOUNTANT', line: 'He has counted every fight you have ever fought. His glances hunt the tool your whole career leans on — at double strength.' },
+  { id: 'mirror',     name: 'THE MIRROR',     line: 'It fights in your style. Your own career tallies drive its strike cycle — you are the lesson it studied.' },
+  { id: 'undertaker', name: 'THE UNDERTAKER', line: 'The deepest named devil down here. What he carries is the best loot in the house.' }
+];
+function descentKind(depth) {
+  if (depth % 3 === 0) return 'boss';
+  if (depth % 5 === 0) return 'vault';
+  if (depth % 2 === 0) return 'elite';
+  return 'normal';
+}
+function bossForDepth(depth) {
+  if (depth % 3 !== 0) return null;
+  const idx = ((depth / 3 - 1) % BOSSES.length + BOSSES.length) % BOSSES.length;
+  const base = BOSSES[idx];
+  const cycle = Math.floor((depth / 3 - 1) / BOSSES.length);
+  return Object.assign({}, base, { cycle, title: cycle > 0 ? base.name + ', AGAIN' : base.name });
+}
+function descentDepthParams(depth) {
+  const kind = descentKind(depth);
+  const intervalMult = Math.max(0.45, 1 - 0.05 * (depth - 1));
+  let gateHp = Math.round(100 + 18 * (depth - 1));
+  let roundMs = 120000;
+  if (kind === 'boss') { gateHp = Math.round(gateHp * 1.35); roundMs = 150000; }
+  if (kind === 'vault') roundMs = 45000;
+  return { kind, gateHp, roundMs, intervalMult, aggression: Math.min(2.2, 1 + 0.06 * (depth - 1)) };
+}
+// The Twin's gear-aware counters, stated honestly: as depth grows she builds
+// raw familiarity against the tool your career leans on AND against any tool
+// carrying a LEGENDARY — lean on a legend down here and she learns it.
+function descentBuildFam(player, depth) {
+  const fam = {};
+  const tu = (player && player.toolUse) || {};
+  let top = null, best = 0;
+  for (const id of TOOL_IDS) { const n = tu[id] || 0; if (n > best) { best = n; top = id; } }
+  if (top && depth >= 2) fam[top] = Math.min(0.30, 0.03 * depth);
+  const worn = wornGearMap(player);
+  for (const slot of TOOL_IDS) {
+    if (worn[slot] && worn[slot].tier === 'LEGENDARY') {
+      fam[slot] = Math.min(0.30, (fam[slot] || 0) + Math.min(0.25, 0.02 * depth));
+    }
+  }
+  return fam;
+}
+function makeDescentStrikes(seed, depth, roundMs, ctx) {
+  ctx = ctx || {};
+  const params = descentDepthParams(depth);
+  if (params.kind === 'vault') return [];
+  const boss = bossForDepth(depth);
+  let cycle = STRIKE.cycle, intervalMult = params.intervalMult;
+  if (boss && boss.id === 'mirror') {
+    const st = devilStyle({ toolUse: ctx.careerTallies || {}, record: { bouts: 1 }, parriesTotal: 0 });
+    cycle = st.cycle; intervalMult *= st.intervalMult;
+  }
+  if (boss && boss.id === 'undertaker') { cycle = ['haymaker', 'clean', 'haymaker', 'glance']; intervalMult *= 0.9; }
+  const rnd = rng32(seed);
+  const interval = (STRIKE.baseMs / params.aggression) * intervalMult;
+  const strikes = [];
+  let t = STRIKE.firstMs + (rnd() - 0.5) * 1200;
+  let i = 0;
+  while (t < roundMs - 1200 && strikes.length < 80) {
+    const kind = cycle[i % cycle.length];
+    const s = { at: Math.round(t), kind };
+    if (kind === 'glance') {
+      // THE ACCOUNTANT: every glance hunts the career-most-used tool.
+      s.tool = (boss && boss.id === 'accountant' && ctx.careerTool) ? ctx.careerTool
+        : TOOL_IDS[Math.floor(rnd() * TOOL_IDS.length)];
+    }
+    strikes.push(s);
+    t += interval + (rnd() - 0.5) * 1600;
+    i++;
+  }
+  return strikes;
+}
+// XP a step below Pit rates: per depth cleared, a boss bonus, a vault wage.
+const DESCENT_XP = { perDepth: 18, boss: 25, vault: 10 };
+// The Twin keeps the lesson of every depth, exactly like a house fight:
+// shapes to the world and to the fighter, armor against favorite tools.
+function teachFromActions(state, player, actions) {
+  const patterns = extractPatterns(actions || []);
+  const learnMult = (has(player, 'dec1') ? 0.7 : 1) * (state.config.learningSpeed || 1);
+  const newToWorld = [], newToPlayer = [];
+  for (const k of Object.keys(patterns)) {
+    if (!state.shapesGlobal[k]) newToWorld.push(k);
+    if (!player.shapes[k]) newToPlayer.push(k);
+    state.shapesGlobal[k] = (state.shapesGlobal[k] || 0) + patterns[k] * learnMult;
+    player.shapes[k] = (player.shapes[k] || 0) + patterns[k] * learnMult;
+  }
+  const toolUse = {};
+  for (const a of actions || []) if (a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:')) toolUse[a.tool] = (toolUse[a.tool] || 0) + 1;
+  player.toolUse = player.toolUse || {};
+  for (const [tool, n] of Object.entries(toolUse)) player.toolUse[tool] = (player.toolUse[tool] || 0) + n;
+  const ranked = Object.entries(toolUse).sort((a, b) => b[1] - a[1]);
+  const armorGains = {};
+  if (ranked[0]) armorGains[ranked[0][0]] = 0.05;
+  if (ranked[1]) armorGains[ranked[1][0]] = 0.025;
+  for (const [tool, gain] of Object.entries(armorGains)) {
+    player.twinArmor[tool] = Math.min(0.45, (player.twinArmor[tool] || 0) + gain);
+    state.globalArmor[tool] = Math.min(0.2, (state.globalArmor[tool] || 0) + 0.002);
+  }
+  return { patterns, newToPlayer, newToWorld, toolUse };
+}
+// Settle a whole run at its end (ascend / turned back / death). Banks what
+// the rules bank, loses what death loses, pays XP once (Ember +10% rides),
+// and writes the run's verdict into the house books.
+function finishDescentRun(state, player, run, how) {
+  run.over = true;
+  let banked = [], lost = [];
+  if (how === 'death') { const split = deathSplit(run.haul); banked = split.keep; lost = split.lost; }
+  else banked = (run.haul || []).slice();
+  bankHaul(player, banked);
+  state.descent = state.descent || { runs: 0, deaths: 0, ascents: 0, turned: 0, bossesSlain: 0, legendaries: 0, godforged: 0, depthsCleared: 0 };
+  for (const p of banked) {
+    if (p.tier === 'LEGENDARY') state.descent.legendaries += 1;
+    if (p.tier === 'GODFORGED') state.descent.godforged = (state.descent.godforged || 0) + 1;
+  }
+  const value = haulValue(banked) + (run.bankedValue || 0); // + what boss kills already banked mid-run
+  const points = run.depthsCleared * 10 + run.bossesSlain * 15;
+  player.points += points;
+  let xpGain = run.xp || 0;
+  const emberBonus = !!founderSerial(player);
+  if (emberBonus) xpGain = Math.floor(xpGain * FOUNDER_XP_MULT);
+  const levelBefore = levelForXp(player.xp || 0);
+  player.xp = (player.xp || 0) + xpGain;
+  player.lastFightAt = Date.now();
+  player.descent = player.descent || { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 };
+  player.descent.runs += 1;
+  player.descent.deepest = Math.max(player.descent.deepest || 0, run.deepest || run.depthsCleared);
+  player.descent.bestScore = Math.max(player.descent.bestScore || 0, run.score || 0);
+  player.descent.bestHaul = Math.max(player.descent.bestHaul || 0, value);
+  player.descent.bossesSlain = (player.descent.bossesSlain || 0) + (run.bossesSlain || 0);
+  if (how === 'death') player.descent.deaths += 1;
+  state.descent.runs += 1;
+  state.descent.depthsCleared += run.depthsCleared || 0;
+  state.descent.bossesSlain += run.bossesSlain || 0;
+  if (how === 'death') state.descent.deaths += 1;
+  else if (how === 'ascend') state.descent.ascents += 1;
+  else state.descent.turned += 1;
+  const secs = Math.max(1, Math.round((Date.now() - (run.startedAt || Date.now())) / 1000));
+  const verdict = {
+    id: run.id, fighterId: player.id,
+    fighterName: player.displayName || 'A fighter',
+    mode: 'descent',
+    result: how === 'death' ? 'lose' : 'win',
+    endReason: how, secs, points,
+    xp: xpGain, emberBonus,
+    level: levelForXp(player.xp), levelUp: levelForXp(player.xp) > levelBefore,
+    shapesTaught: [], shapesTaughtCount: 0, newToWorldCount: 0, armorGains: {},
+    fightStats: null,
+    descent: {
+      depthsCleared: run.depthsCleared || 0,
+      deepest: run.deepest || run.depthsCleared || 0,
+      score: run.score || 0,
+      bossesSlain: run.bossesSlain || 0,
+      haulValue: value,
+      banked: banked.map(p => ({ name: p.name, tier: p.tier, slot: p.slot, serial: p.serial || null })),
+      lost: lost.map(p => ({ name: p.name, tier: p.tier, slot: p.slot }))
+    },
+    at: Date.now()
+  };
+  state.verdicts[run.id] = verdict;
+  state.fights.unshift({
+    id: run.id, name: verdict.fighterName, result: verdict.result, how,
+    secs, shapes: 0, mode: 'descent', at: verdict.at
+  });
+  state.fights = state.fights.slice(0, 60);
+  return verdict;
+}
+
 function educationMeter(state) {
   const shapes = Object.keys(state.shapesGlobal).length;
   const fighters = Object.values(state.players).filter(p => p.record && p.record.bouts > 0).length;
@@ -1036,5 +1575,12 @@ module.exports = {
   grantFounderEmber, founderSerial, HEART_RESTORE, BELL_FREEZE_MS, FOUNDER_CAP, FOUNDER_XP_MULT,
   has, familiarity, familiarityParts, effectiveStats, extractPatterns, validateLog,
   makeStrikes, simulateRound, rng32,
-  settleFight, settlePitFight, educationMeter, fmtTime
+  settleFight, settlePitFight, educationMeter, fmtTime,
+  GEAR_SLOTS, GEAR_TIERS, TIER_AFFIXES, HAUL_VALUES, AFFIX_POOLS, GEAR_UNIQUES,
+  affixValue, gearMods, wornGearMap, gearSummary, gearLine,
+  rollGearPiece, rollTier, DROP_TABLES, bossLegendaryChance, haulValue,
+  deathSplit, bankHaul, wearGear, unwearGear,
+  GODFORGED, godforgedChance, rollGodforged, spendGodCharge,
+  BOSSES, descentKind, bossForDepth, descentDepthParams, descentBuildFam,
+  makeDescentStrikes, DESCENT_XP, teachFromActions, finishDescentRun
 };

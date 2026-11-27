@@ -405,3 +405,91 @@ ul.items.spent .itemline{opacity:.62}
 .v-gear{color:#ff9db8}
 .v-xp{color:var(--good); font-weight:700}
 .v-combos{color:var(--gold)}
+
+/* ---- THE DESCENT: gothic-cathedral skin ----------------------------------
+   Deep blacks, ember red, old gold — a different dark from the arena's neon.
+   The stage keeps the arena's geometry; the light down here is firelight. */
+.descent-wrap{max-width:1060px; margin:0 auto; padding:1rem}
+.descent-hero{text-align:center; padding:2.2rem 1rem 1.2rem;
+  background:radial-gradient(700px 300px at 50% 0%, rgba(255,90,40,.10), transparent 70%)}
+.descent-arch{font-size:2.2rem; filter:grayscale(.3) sepia(.4); opacity:.85}
+.descent-hero h1{font-size:2.6rem; letter-spacing:.22em; margin:.4rem 0 .8rem; color:#ffe9a8;
+  text-shadow:0 0 30px rgba(255,122,26,.45), 2px 0 rgba(255,42,60,.35)}
+.descent-hero .lede{color:#cbb9a0}
+.descent-record{display:flex; gap:1.6rem; justify-content:center; flex-wrap:wrap; margin:1rem 0 1.2rem}
+.descent-record div{text-align:center}
+.descent-record strong{display:block; font-size:1.5rem; color:#ffd166; font-variant-numeric:tabular-nums}
+.descent-record span{color:var(--dim); font-size:.78rem; letter-spacing:.12em; text-transform:uppercase}
+.runline{text-align:center; color:#d8a441; letter-spacing:.08em; margin:.5rem 0; font-variant-numeric:tabular-nums}
+.descent-stage{background:#070405; border-color:#3a2418}
+.lootlayer{position:absolute; inset:0; pointer-events:none; overflow:hidden}
+.stage{position:relative}
+.beam{position:absolute; top:0; bottom:0; width:70px; margin-left:-35px; text-align:center; animation:beamrise .5s ease-out}
+.beam i{display:block; position:absolute; left:50%; top:0; bottom:0; width:10px; margin-left:-5px;
+  background:linear-gradient(180deg, transparent, currentColor 30%, currentColor 75%, transparent);
+  box-shadow:0 0 34px currentColor; opacity:.85}
+.beam span{position:absolute; left:50%; transform:translateX(-50%); bottom:16%; width:170px;
+  font-size:.8rem; font-weight:700; color:#fff; text-shadow:0 1px 6px #000; line-height:1.35}
+.beam b{letter-spacing:.14em}
+.beam.fade{opacity:0; transition:opacity .7s}
+@keyframes beamrise{from{transform:scaleY(.2); opacity:0} to{transform:scaleY(1); opacity:1}}
+.beam.t-sturdy{color:#cfd6dd}
+.beam.t-rare{color:#3fa9ff}
+.beam.t-epic{color:#b967ff}
+.beam.t-legendary{color:#ffd700; width:120px; margin-left:-60px}
+.beam.t-legendary i{width:22px; margin-left:-11px; box-shadow:0 0 60px #ffd700}
+.beam.t-legendary span{font-size:.95rem; bottom:22%}
+.beam.t-godforged{color:#fff3c4; width:170px; margin-left:-85px}
+.beam.t-godforged i{width:34px; margin-left:-17px; background:linear-gradient(180deg, transparent, #fff 25%, #ffd700 60%, transparent); box-shadow:0 0 90px #ffd700, 0 0 30px #fff}
+.beam.t-godforged span{font-size:1.05rem; bottom:26%; color:#ffe9a8}
+.bossplate{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(600px 300px at 50% 50%, rgba(20,2,2,.88), rgba(5,0,0,.96)); z-index:6; text-align:center; padding:1rem}
+.bossplate.hidden{display:none}
+.bossplate-inner{animation:platein .7s ease-out}
+@keyframes platein{from{transform:scale(1.14); opacity:0} to{transform:scale(1); opacity:1}}
+.bossplate .boss-tag{color:#ff5a2a; letter-spacing:.34em; font-size:.8rem}
+.bossplate h2{font-size:2.4rem; letter-spacing:.14em; color:#ffe9a8; margin:.5rem 0; text-shadow:0 0 34px rgba(255,42,60,.6)}
+.bossplate p{color:#cbb9a0; max-width:520px; margin:0 auto}
+.depthbanner{position:absolute; top:12%; left:0; right:0; text-align:center; z-index:5; pointer-events:none;
+  font-size:1.7rem; font-weight:900; letter-spacing:.3em; color:#ffe9a8; text-shadow:0 0 26px rgba(255,122,26,.7); opacity:0}
+.depthbanner.hidden{display:none}
+.depthbanner.show{animation:bannerin 2.6s ease-out forwards}
+@keyframes bannerin{0%{opacity:0; transform:translateY(10px)} 18%{opacity:1; transform:none} 78%{opacity:1} 100%{opacity:0}}
+.gatechoice{position:absolute; inset:0; z-index:7; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:radial-gradient(700px 340px at 50% 55%, rgba(30,10,4,.9), rgba(4,2,1,.97)); text-align:center; padding:1.2rem}
+.gatechoice.hidden{display:none}
+.gatechoice h2{letter-spacing:.26em; color:#ffe9a8; text-shadow:0 0 24px rgba(255,180,60,.5); margin:.2rem 0 .6rem}
+.gatechoice p{color:#cbb9a0; max-width:520px}
+.gatechoice-btns{display:flex; gap:1rem; flex-wrap:wrap; justify-content:center; margin-top:1rem}
+.fightbtn.descend{background:linear-gradient(180deg, #ff7a2a, #c22e12); color:#fff7e8}
+.fightbtn.ascend{background:linear-gradient(180deg, #ffe9a8, #d8a441); color:#241503}
+.haulfeed{margin-top:1rem}
+ul#haulfeed{list-style:none; padding:0; margin:.4rem 0}
+.gearline{padding:.45rem .6rem; margin:.35rem 0; border:1px solid var(--line); border-left:3px solid #8b98a9; background:rgba(16,20,31,.7); font-size:.9rem; list-style:none}
+.gearline.t-rare{border-left-color:#3fa9ff}
+.gearline.t-epic{border-left-color:#b967ff}
+.gearline.t-legendary{border-left-color:#ffd700; background:linear-gradient(90deg, rgba(255,215,0,.12), rgba(16,20,31,.7) 65%); box-shadow:0 0 14px rgba(255,215,0,.18)}
+.gearline.t-godforged{border-left-color:#fff3c4; background:linear-gradient(90deg, rgba(255,215,0,.22), rgba(16,20,31,.7) 70%); box-shadow:0 0 22px rgba(255,215,0,.35)}
+.tierbadge{display:inline-block; padding:.08rem .45rem; border:1px solid #8b98a9; color:#cfd6dd; font-size:.75rem; font-weight:700; letter-spacing:.06em; margin:.1rem .15rem .1rem 0}
+.tierbadge.t-sturdy{border-color:#8b98a9; color:#cfd6dd}
+.tierbadge.t-rare{border-color:#3fa9ff; color:#8ec9ff}
+.tierbadge.t-epic{border-color:#b967ff; color:#d9b8ff}
+.tierbadge.t-legendary{border-color:#ffd700; color:#ffe970; background:rgba(255,215,0,.12)}
+.tierbadge.t-godforged{border-color:#fff3c4; color:#fff3c4; background:linear-gradient(90deg, rgba(255,215,0,.3), rgba(255,255,255,.12)); box-shadow:0 0 12px rgba(255,215,0,.45)}
+.gear-row{display:flex; align-items:center; gap:.6rem; padding:.35rem 0; flex-wrap:wrap}
+.gear-slot{font-weight:700; min-width:92px; color:#d8a441}
+.inlineform{display:inline}
+.wornline{margin:.6rem 0}
+.tool.twinned{box-shadow:0 0 0 1px #ffd700, 0 0 18px rgba(255,215,0,.35)}
+.tool.seized{opacity:.45; filter:grayscale(.7)}
+.tool .tgear{display:block; font-size:.72rem; color:#ffd166; letter-spacing:.03em}
+.itemopt.godopt{border-left-color:#fff3c4; background:linear-gradient(90deg, rgba(255,215,0,.14), transparent 70%)}
+.pit-gear{margin:.3rem 0}
+.v-descent{border:1px solid #3a2418; background:rgba(20,8,4,.5); padding:.6rem .8rem; margin:.6rem 0}
+.descent-boards{margin-top:1.2rem}
+@media (max-width:640px){
+  .descent-hero h1{font-size:1.9rem}
+  .bossplate h2{font-size:1.6rem}
+  .beam span{width:120px; font-size:.7rem}
+  .gatechoice-btns .fightbtn{padding:.8rem 1.2rem; font-size:.95rem}
+}

@@ -14,6 +14,12 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 store.load();
 const state = store.get();
 const activeFights = new Map(); // fightId -> fight (memory only; a restart voids open rounds)
+const activeRuns = new Map();   // runId -> Descent run (memory only, same law)
+
+// THE DESCENT's books, for worlds written before it existed.
+if (!state.descent) state.descent = { runs: 0, deaths: 0, ascents: 0, turned: 0, bossesSlain: 0, legendaries: 0, godforged: 0, depthsCleared: 0 };
+if (typeof state.descent.godforged !== 'number') state.descent.godforged = 0;
+if (!state.gearSeq) state.gearSeq = {};
 
 // THE KEEPER'S SET: if the house owner fighter already exists (the deck was
 // tied in an earlier age), grant the master set now — at boot, before any
@@ -95,7 +101,9 @@ function newPlayer(displayName) {
     devil: { bounty: game.PIT.bountyBase, bountyDay: game.dayKey(Date.now()), held: 0, breached: 0, lastBreachedBy: null, breachedBy: [] },
     pitAttack: { bouts: 0, breaches: 0 },
     itemStock: { mirrorwrap: [], anchorstitch: [] }, itemHistory: [],
-    pitAttempts: {}, defenseXpDay: { day: game.dayKey(Date.now()), count: 0 }
+    pitAttempts: {}, defenseXpDay: { day: game.dayKey(Date.now()), count: 0 },
+    // THE DESCENT: the satchel's gear shelf + the delve record
+    gear: [], descent: { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 }
   };
   state.players[p.id] = p;
   return p;
@@ -122,6 +130,8 @@ function ensurePlayer(p) {
   if (!p.itemHistory) p.itemHistory = [];
   if (!p.pitAttempts) p.pitAttempts = {};
   if (!p.defenseXpDay) p.defenseXpDay = { day: game.dayKey(Date.now()), count: 0 };
+  if (!p.gear) p.gear = [];
+  if (!p.descent) p.descent = { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 };
   return p;
 }
 // Item counts as a plain object, for the surfaces that just need numbers.
@@ -225,6 +235,248 @@ function serveStatic(res, baseDir, urlPath) {
   return true;
 }
 
+// ---------- THE DESCENT: run machinery -------------------------------------
+function mostUsedTool(tallies) {
+  let top = null, best = 0;
+  for (const id of game.TOOL_IDS) { const n = (tallies && tallies[id]) || 0; if (n > best) { best = n; top = id; } }
+  return top;
+}
+function dropSummaries(pieces) {
+  return (pieces || []).map(p => ({
+    id: p.id, name: p.name, tier: p.tier, slot: p.slot, serial: p.serial || null,
+    unique: p.unique || null, affixes: (p.affixes || []).map(a => a.label)
+  }));
+}
+function refundRunGear(me, run) {
+  if (run.heartSerial != null && !run.heartUsed) game.refundItem(me, 'secondheart', run.heartSerial);
+  if (run.bellSerial != null && !run.bellRung) game.refundItem(me, 'stillbell', run.bellSerial);
+}
+// Deal the next depth of a run: seeded schedule, boss rules, carried
+// integrity/trace dealt into the combat block, the Captor's seizure dealt
+// into the stats where the referee can enforce it.
+function dealDescentDepth(me, run) {
+  const depth = run.depth + 1;
+  run.depth = depth;
+  run.awaitingChoice = false;
+  const params = game.descentDepthParams(depth);
+  const kind = params.kind;
+  const boss = game.bossForDepth(depth);
+  const depthSeed = (run.seed ^ Math.imul(depth, 2654435761)) >>> 0;
+  let seized = null;
+  if (boss && boss.id === 'captor') {
+    const tool = mostUsedTool(run.toolUseRun) || mostUsedTool(me.toolUse) || 'flood';
+    run.seizedTool = tool;
+    seized = { tool, at: Math.round(params.roundMs * 0.4) };
+  }
+  const stats = game.effectiveStats(state, me, me.twinArmor || {}, {
+    gateHp: params.gateHp, roundMs: params.roundMs,
+    twinTool: run.twinTool, seized,
+    buildFam: game.descentBuildFam(me, depth)
+  });
+  stats.combat.startIntegrity = run.integrity;
+  stats.combat.startTrace = run.trace;
+  // THE ACCOUNTANT: double-strength counters — his glances scramble the
+  // career tool for twice as long, dealt into the combat block.
+  if (boss && boss.id === 'accountant') stats.combat.scrambleMs = game.STRIKE.scrambleMs * 2;
+  // GODFORGED, dealt like everything else: the run's declared treasure rides
+  // the fight as a snapshot the referee enforces.
+  let godSnap = null;
+  if (run.godPower) {
+    godSnap = { power: run.godPower, mercyUsed: !!run.mercyUsed, dawnUsed: !!run.dawnUsed };
+    if (run.godPower === 'openbook') {
+      // THE OPEN BOOK: every telegraph stands open — parry windows run wide.
+      stats.combat.windupMs += 600;
+    }
+    if (run.godPower === 'unreadstrike') {
+      // THE UNREAD STRIKE: the tool this run leans on cannot be scrambled,
+      // and (at settle) its strikes teach the Twin nothing.
+      const unreadTool = mostUsedTool(run.toolUseRun) || mostUsedTool(me.toolUse) || 'flood';
+      run.godUnreadTool = unreadTool;
+      if (stats.tools[unreadTool]) stats.tools[unreadTool].silent = true;
+      stats.godUnread = unreadTool;
+      godSnap.unreadTool = unreadTool;
+    }
+  }
+  const strikes = game.makeDescentStrikes(depthSeed, depth, params.roundMs, {
+    careerTool: mostUsedTool(me.toolUse), careerTallies: me.toolUse || {}
+  });
+  const fight = {
+    id: rid(10), playerId: me.id, mode: 'descent', runId: run.id,
+    depth, kind, bossId: boss ? boss.id : null,
+    heart: run.heartSerial != null && !run.heartUsed,
+    bell: run.bellSerial != null && !run.bellRung,
+    god: godSnap,
+    gearSerials: null, // run-scoped: settled at the run's end, never per depth
+    stats, seed: depthSeed, strikes, startedAt: Date.now(),
+    storm: false, pointsMult: 1, floodgates: !!state.config.floodgates
+  };
+  activeFights.set(fight.id, fight);
+  return {
+    fightId: fight.id, stats, strikes, mode: 'descent',
+    descent: {
+      runId: run.id, depth, kind,
+      boss: boss ? { id: boss.id, name: boss.title, line: boss.line } : null,
+      score: run.score, haulCount: run.haul.length,
+      integrity: run.integrity, trace: run.trace,
+      twinTool: run.twinTool, seizedTool: seized ? seized.tool : null,
+      heart: fight.heart, bell: fight.bell,
+      god: run.godPower ? { power: run.godPower, name: game.GODFORGED[run.godPower].name, unreadTool: run.godUnreadTool || null, mercyUsed: !!run.mercyUsed, dawnUsed: !!run.dawnUsed } : null
+    }
+  };
+}
+// Settle one depth of a run (called from /api/fight/finish). Drops roll from
+// the run seed and the depth — reproducible, referee-verifiable, unforgeable.
+function finishDescentDepth(res, me, fight, sim, problem, actions, claimedDuration) {
+  const run = activeRuns.get(fight.runId);
+  const depth = fight.depth, kind = fight.kind;
+  if (problem || !run) {
+    // A forged depth voids the whole run: the haul was never real, declared
+    // pieces that never fired come home, and the books record the void.
+    if (run) { refundRunGear(me, run); activeRuns.delete(run.id); }
+    const v = {
+      id: fight.id, fighterId: me.id, fighterName: me.displayName || 'A fighter',
+      mode: 'descent', challengeOwnerId: null, result: 'lose', endReason: 'void',
+      secs: Math.round(claimedDuration / 1000), points: 0, xp: 0, emberBonus: false,
+      level: game.levelForXp(me.xp || 0), levelUp: false,
+      shapesTaught: [], shapesTaughtCount: 0, newToWorldCount: 0, armorGains: {},
+      fightStats: null, at: Date.now(), voided: problem || 'run lost'
+    };
+    state.verdicts[fight.id] = v;
+    state.fights.unshift({ id: fight.id, name: v.fighterName, result: 'lose', how: 'void', secs: v.secs, shapes: 0, mode: 'descent', at: v.at });
+    state.fights = state.fights.slice(0, 60);
+    store.save(true);
+    return sendJson(res, { verdict: v, voided: v.voided, descent: { over: true } });
+  }
+  const settledActions = sim.outcome ? actions.filter(a => a && a.t <= sim.outcome.at + 250) : actions;
+  // THE UNREAD STRIKE (GODFORGED): the declared tool's strikes teach the
+  // Twin nothing this depth — the lesson is filtered before it is learned.
+  const teachActions = (run.godPower === 'unreadstrike' && run.godUnreadTool)
+    ? settledActions.filter(a => a.tool !== run.godUnreadTool) : settledActions;
+  // The Twin keeps the lesson of every depth, exactly like a house fight.
+  game.teachFromActions(state, me, teachActions);
+  if (sim.parries) me.parriesTotal = (me.parriesTotal || 0) + sim.parries;
+  for (const a of settledActions) {
+    if (a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:')) {
+      run.toolUseRun[a.tool] = (run.toolUseRun[a.tool] || 0) + 1;
+    }
+  }
+  if (sim.heartUsed) run.heartUsed = true;
+  if (sim.bellRung) run.bellRung = true;
+  // GODFORGED charges are spent only when a power FIRES — never for riding
+  // along. Passive powers (Unread Strike, Open Book) fire by standing open
+  // for the run: their charge is spent at the run's first settled depth.
+  if (run.godPieceId && !run.godFired) {
+    let firedHow = null;
+    if (sim.mercyUsed && run.godPower === 'keepersmercy') firedHow = 'mercy at depth ' + depth;
+    else if (sim.dawnUsed && run.godPower === 'seconddawn') firedHow = 'the dawn at depth ' + depth;
+    else if ((run.godPower === 'unreadstrike' || run.godPower === 'openbook') && !run.godSettles) firedHow = run.godPower + ' stood open';
+    if (firedHow) {
+      if (game.spendGodCharge(me, run.godPieceId, firedHow)) run.godFired = true;
+    }
+  }
+  if (sim.mercyUsed) run.mercyUsed = true;
+  if (sim.dawnUsed) run.dawnUsed = true;
+  run.godSettles = (run.godSettles || 0) + 1;
+  let cleared = false, died = false, turned = false;
+  if (sim.outcome && sim.outcome.result === 'win') cleared = true;
+  else if (sim.outcome && sim.outcome.result === 'lose') died = true;
+  else turned = true; // the clock ran out
+  if (kind === 'vault' && !died) { cleared = true; turned = false; } // the Vault's timer IS its ending
+  // ---- drops, rolled from the run seed ^ the depth — the dealt truth
+  const drops = [];
+  const drng = game.rng32((run.seed ^ Math.imul(depth, 40503)) >>> 0);
+  if (kind === 'vault') {
+    const shapeCount = 14;
+    const cracks = Math.round((sim.damagePct / 100) * shapeCount);
+    run.score += cracks * 15;
+    for (let i = 0; i < cracks; i++) {
+      if (drng() < 0.30) {
+        const piece = game.rollGearPiece(state, drng, { tier: game.rollTier(drng, game.DROP_TABLES.vault) });
+        run.haul.push(piece); drops.push(piece);
+      }
+    }
+  } else if (cleared) {
+    run.score += 100 + depth * 10;
+    if (kind === 'boss') {
+      run.score += 150;
+      // GODFORGED: bosses at Depth 9 and deeper only, at a few percent —
+      // or it isn't one. The chance is dealt here, from the same seeded rng
+      // as every other drop, and the books count every piece that exists.
+      if (depth >= 9 && drng() < game.godforgedChance(depth)) {
+        const piece = game.rollGodforged(state, drng);
+        run.haul.push(piece); drops.push(piece);
+      } else {
+        const tier = drng() < game.bossLegendaryChance(depth) ? 'LEGENDARY' : 'EPIC';
+        const piece = game.rollGearPiece(state, drng, { tier });
+        run.haul.push(piece); drops.push(piece);
+      }
+      if (drng() < 0.5) {
+        const p2 = game.rollGearPiece(state, drng, { tier: game.rollTier(drng, game.DROP_TABLES.elite) });
+        run.haul.push(p2); drops.push(p2);
+      }
+    } else if (drng() < (kind === 'elite' ? 0.75 : 0.40)) {
+      const piece = game.rollGearPiece(state, drng, { tier: game.rollTier(drng, game.DROP_TABLES[kind === 'elite' ? 'elite' : 'shape']) });
+      run.haul.push(piece); drops.push(piece);
+    }
+  }
+  // THE DOUBLE HARVEST (GODFORGED): the first depth of the run that drops
+  // loot drops it twice over — every piece rolled is rolled again, same tier.
+  if (run.godPower === 'doubleharvest' && !run.godFired && drops.length) {
+    const extra = [];
+    for (const p of drops.slice()) {
+      extra.push(p.tier === 'GODFORGED' ? game.rollGodforged(state, drng)
+        : game.rollGearPiece(state, drng, { tier: p.tier }));
+    }
+    for (const p of extra) { run.haul.push(p); drops.push(p); }
+    if (game.spendGodCharge(me, run.godPieceId, 'the harvest at depth ' + depth)) run.godFired = true;
+  }
+  // ---- the Captor's bargain resolves with his depth
+  let captor = null;
+  if (fight.bossId === 'captor' && run.seizedTool) {
+    if (cleared) { run.twinTool = run.seizedTool; captor = 'twinned'; }
+    else captor = 'lost';
+    if (cleared) run.seizedTool = null;
+  }
+  run.integrity = died ? 0 : sim.integrityLeft;
+  run.trace = sim.trace;
+  run.deepest = Math.max(run.deepest || 0, depth);
+  if (cleared) {
+    run.depthsCleared += 1;
+    run.xp += kind === 'boss' ? game.DESCENT_XP.perDepth + game.DESCENT_XP.boss
+      : kind === 'vault' ? game.DESCENT_XP.vault : game.DESCENT_XP.perDepth;
+    if (kind === 'boss') run.bossesSlain += 1;
+  }
+  // ---- a boss kill banks the haul on the spot
+  let bankedNow = [];
+  if (cleared && kind === 'boss' && run.haul.length) {
+    bankedNow = run.haul.splice(0, run.haul.length);
+    game.bankHaul(me, bankedNow);
+    run.bankedValue = (run.bankedValue || 0) + game.haulValue(bankedNow);
+    for (const pc of bankedNow) {
+      if (pc.tier === 'LEGENDARY') state.descent.legendaries += 1;
+      if (pc.tier === 'GODFORGED') state.descent.godforged = (state.descent.godforged || 0) + 1;
+    }
+  }
+  const depthReport = {
+    depth, kind, cleared, died, drops: dropSummaries(drops),
+    bankedNow: dropSummaries(bankedNow), captor,
+    score: run.score, haulCount: run.haul.length,
+    integrity: run.integrity, trace: run.trace, twinTool: run.twinTool
+  };
+  if (died || turned) {
+    refundRunGear(me, run);
+    const verdict = game.finishDescentRun(state, me, run, died ? 'death' : 'turned');
+    verdict.heartBroke = !!run.heartUsed;
+    verdict.bellRung = !!run.bellRung;
+    activeRuns.delete(run.id);
+    store.save(true);
+    return sendJson(res, { verdict, descent: Object.assign({ over: true }, depthReport) });
+  }
+  run.awaitingChoice = true;
+  store.save(true);
+  return sendJson(res, { descent: Object.assign({ over: false, state: 'gate' }, depthReport) });
+}
+
 // ---------- routes ----------
 async function route(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -263,6 +515,9 @@ async function route(req, res) {
   if (method === 'GET' && p === '/pit') {
     const sort = ['bounty', 'record', 'grudge'].includes(url.searchParams.get('sort')) ? url.searchParams.get('sort') : 'bounty';
     return sendHtml(res, views.pitPage(state, me, sort));
+  }
+  if (method === 'GET' && p === '/descent') {
+    return sendHtml(res, views.descentPage(state, me));
   }
   if (method === 'GET' && p === '/login') return sendHtml(res, views.authPage(state, me, 'login'));
   if (method === 'GET' && p === '/signup') return sendHtml(res, views.authPage(state, me, 'signup'));
@@ -379,6 +634,17 @@ async function route(req, res) {
       hunters: members.filter(x => x.pitAttack.breaches > 0).sort((a, b) => b.pitAttack.breaches - a.pitAttack.breaches).slice(0, 5)
         .map(x => ({ id: x.id, name: x.displayName, breaches: x.pitAttack.breaches }))
     };
+    // THE DESCENT's boards: deepest delves, richest runs, fattest hauls.
+    const drec = x => x.descent || { deepest: 0, bestScore: 0, bestHaul: 0 };
+    const descentBoards = {
+      tallies: state.descent || { runs: 0, deaths: 0, ascents: 0, turned: 0, bossesSlain: 0, legendaries: 0, depthsCleared: 0 },
+      deepest: members.filter(x => drec(x).deepest > 0).sort((a, b) => drec(b).deepest - drec(a).deepest).slice(0, 5)
+        .map(x => ({ id: x.id, name: x.displayName, deepest: drec(x).deepest })),
+      scores: members.filter(x => drec(x).bestScore > 0).sort((a, b) => drec(b).bestScore - drec(a).bestScore).slice(0, 5)
+        .map(x => ({ id: x.id, name: x.displayName, score: drec(x).bestScore })),
+      hauls: members.filter(x => drec(x).bestHaul > 0).sort((a, b) => drec(b).bestHaul - drec(a).bestHaul).slice(0, 5)
+        .map(x => ({ id: x.id, name: x.displayName, haul: drec(x).bestHaul }))
+    };
     const storm = game.stormActive(state);
     const bc = state.config.broadcast;
     const broadcast = bc && bc.text && (!bc.expiresAt || Date.now() < bc.expiresAt) ? bc.text : null;
@@ -392,6 +658,7 @@ async function route(req, res) {
       storm: { active: storm, until: storm ? state.config.stormUntil : 0, secsLeft: storm ? Math.max(0, Math.round((state.config.stormUntil - Date.now()) / 1000)) : 0 },
       broadcast, floodgates: !!state.config.floodgates, spotlight,
       pit: { tallies: state.pit || { bouts: 0, holds: 0, breaches: 0 }, holds: pitTop.holds, bounties: pitTop.bounties, hunters: pitTop.hunters },
+      descent: descentBoards,
       founders: { claimed: (state.itemsSeq && state.itemsSeq.foundersember) || 0, cap: game.FOUNDER_CAP }
     });
   }
@@ -403,6 +670,8 @@ async function route(req, res) {
       record: me.record, challengeToken: me.challengeToken,
       xp: me.xp || 0, level: cls.level, className: cls.name, classIdx: cls.idx,
       items: itemCounts(me), itemStock: me.itemStock || { mirrorwrap: [], anchorstitch: [] },
+      gear: me.gear || [], wornGear: game.gearSummary(game.wornGearMap(me)),
+      descent: me.descent || { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 },
       pitAttack: me.pitAttack || { bouts: 0, breaches: 0 },
       devil: me.devil ? { held: me.devil.held, breached: me.devil.breached, bounty: game.bountyNow(me, Date.now()) } : null
     });
@@ -595,6 +864,11 @@ async function route(req, res) {
       }
     }
     const problem = sim.problem || (resolved ? null : 'round ended without cause');
+    // THE DESCENT settles depth by depth through its own director (drops,
+    // banking, the Captor's bargain, god-tier charges) — same referee above.
+    if (fight.mode === 'descent') {
+      return finishDescentDepth(res, me, fight, sim, problem, actions, claimedDuration);
+    }
     if (problem) {
       // A voided Pit bout refunds its declared items — the fight, honestly,
       // never happened. (The daily attempt stays spent: the door was used.)
@@ -659,6 +933,99 @@ async function route(req, res) {
     verdict.bellRung = !!sim.bellRung;
     store.save(true);
     return sendJson(res, { verdict });
+  }
+
+  // ---- THE DESCENT: runs ---------------------------------------------------
+  if (method === 'POST' && p === '/api/descent/start') {
+    if (state.config.frozen) return sendJson(res, { error: 'frozen', message: 'The arena is frozen.' }, 423);
+    if (!me.email) return sendJson(res, { error: 'members-only', message: 'The Descent is members-only. Claim a profile to delve.' }, 403);
+    const f = await bodyJson(req).catch(() => ({}));
+    for (const r of activeRuns.values()) {
+      if (r.playerId === me.id) return sendJson(res, { error: 'already descending', message: 'You are already down there. Finish or abandon that run first.' }, 409);
+    }
+    const wantHeart = !!f.heart, wantBell = !!f.bell;
+    if (wantHeart && game.itemCount(me, 'secondheart') < 1) return sendJson(res, { error: 'item', message: 'You hold no Second Heart.' }, 400);
+    if (wantBell && game.itemCount(me, 'stillbell') < 1) return sendJson(res, { error: 'item', message: 'You hold no Stillbell.' }, 400);
+    // GODFORGED declaration: one treasure per run, from the satchel, with
+    // charges left to spend. A retired or borrowed number is refused here.
+    let godPiece = null;
+    if (f.god) {
+      godPiece = (me.gear || []).find(g => g.id === String(f.god));
+      if (!godPiece || godPiece.tier !== 'GODFORGED') return sendJson(res, { error: 'item', message: 'That is not a GODFORGED treasure in your satchel.' }, 400);
+      if (godPiece.retired || !(godPiece.charges > 0)) return sendJson(res, { error: 'item', message: godPiece.name + ' is spent out — its number is retired.' }, 400);
+    }
+    const run = {
+      id: rid(10), playerId: me.id, seed: crypto.randomInt(1, 2147483647),
+      depth: 0, depthsCleared: 0, deepest: 0, score: 0, xp: 0,
+      haul: [], bankedValue: 0, bossesSlain: 0,
+      integrity: 100, trace: 0, toolUseRun: {}, twinTool: null, seizedTool: null,
+      heartSerial: null, bellSerial: null, heartUsed: false, bellRung: false,
+      godPieceId: godPiece ? godPiece.id : null, godPower: godPiece ? godPiece.god : null,
+      godFired: false, godSettles: 0, mercyUsed: false, dawnUsed: false, godUnreadTool: null,
+      awaitingChoice: false, over: false, startedAt: Date.now()
+    };
+    if (wantHeart) run.heartSerial = game.spendItem(me, 'secondheart', 'the Descent');
+    if (wantBell) run.bellSerial = game.spendItem(me, 'stillbell', 'the Descent');
+    const base = game.effectiveStats(state, me, me.twinArmor || {});
+    run.integrity = base.combat.playerHp;
+    activeRuns.set(run.id, run);
+    const payload = dealDescentDepth(me, run);
+    store.save(true);
+    return sendJson(res, payload);
+  }
+  if (method === 'POST' && p === '/api/descent/choose') {
+    const f = await bodyJson(req).catch(() => ({}));
+    const run = activeRuns.get(String(f.runId || ''));
+    if (!run || run.playerId !== me.id) return sendJson(res, { error: 'run not found or not yours' }, 404);
+    if (!run.awaitingChoice) return sendJson(res, { error: 'no gate stands open' }, 409);
+    if (f.choice === 'ascend') {
+      refundRunGear(me, run);
+      const verdict = game.finishDescentRun(state, me, run, 'ascend');
+      verdict.heartBroke = !!run.heartUsed;
+      verdict.bellRung = !!run.bellRung;
+      activeRuns.delete(run.id);
+      store.save(true);
+      return sendJson(res, { verdict, descent: { over: true } });
+    }
+    if (f.choice === 'descend') {
+      const payload = dealDescentDepth(me, run);
+      store.save(true);
+      return sendJson(res, payload);
+    }
+    return sendJson(res, { error: 'choose descend or ascend' }, 400);
+  }
+  if (method === 'POST' && p === '/api/descent/abandon') {
+    const f = await bodyJson(req).catch(() => ({}));
+    const run = activeRuns.get(String(f.runId || ''));
+    if (!run || run.playerId !== me.id) return sendJson(res, { error: 'run not found or not yours' }, 404);
+    for (const [fid, ft] of activeFights) if (ft.runId === run.id) activeFights.delete(fid);
+    refundRunGear(me, run);
+    const verdict = game.finishDescentRun(state, me, run, 'ascend');
+    verdict.heartBroke = !!run.heartUsed;
+    verdict.bellRung = !!run.bellRung;
+    activeRuns.delete(run.id);
+    store.save(true);
+    return sendJson(res, { verdict, descent: { over: true } });
+  }
+
+  // ---- the satchel's gear shelf: swapping happens between runs, never mid-delve
+  if (method === 'POST' && p === '/api/gear/wear') {
+    if (!me.email) return redirect(res, '/signup');
+    const f = await bodyForm(req);
+    for (const r of activeRuns.values()) if (r.playerId === me.id) return redirect(res, '/descent?gear=run');
+    const err = game.wearGear(me, String(f.gearId || ''));
+    if (err) return redirect(res, '/profile?gear=bad');
+    store.save(true);
+    return redirect(res, '/profile#satchel');
+  }
+  if (method === 'POST' && p === '/api/gear/unwear') {
+    if (!me.email) return redirect(res, '/signup');
+    const f = await bodyForm(req);
+    for (const r of activeRuns.values()) if (r.playerId === me.id) return redirect(res, '/descent?gear=run');
+    const err = game.unwearGear(me, String(f.slot || ''));
+    if (err) return redirect(res, '/profile?gear=bad');
+    store.save(true);
+    return redirect(res, '/profile#satchel');
   }
 
   // ---- deck

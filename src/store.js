@@ -29,6 +29,8 @@ function defaultState() {
     shapesGlobal: {},       // patternKey -> times taught (all fighters, ever)
     globalArmor: {},        // tool -> 0..0.2 shared hardening from the whole crowd
     pit: { bouts: 0, holds: 0, breaches: 0 }, // THE PIT's own tallies — devils, not the house Twin
+    descent: { runs: 0, deaths: 0, ascents: 0, turned: 0, bossesSlain: 0, legendaries: 0, godforged: 0, depthsCleared: 0 }, // THE DESCENT's tallies
+    gearSeq: {},              // LEGENDARY gear edition counters, per unique power (+ _inst instance counter)
     itemsSeq: { mirrorwrap: 0, anchorstitch: 0 }, // numbered-edition mint counters, per item type
     keeperSetGranted: false, // the Keeper's master set is granted once, when the owner fighter exists
     fights: [],             // recent fight summaries, newest first (spectator rail), cap 60

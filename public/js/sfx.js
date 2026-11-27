@@ -249,6 +249,74 @@
       });
       noise({ dur: 0.5, gain: 0.06, ftype: 'highpass', freq: 7000, at: 0.1 });
       tone({ f0: 2093, dur: 0.5, type: 'sine', gain: 0.12, at: 0.55 });
+    },
+    // ---- THE DESCENT's voices: lower, older, cathedral air ----------------
+    lootSturdy: function () { // a pale beam — one plain note, honest and small
+      tone({ f0: 392, dur: 0.16, type: 'triangle', gain: 0.16 });
+      tone({ f0: 523, dur: 0.14, type: 'triangle', gain: 0.10, at: 0.07 });
+    },
+    lootRare: function () { // a blue beam — two notes, a step of hope
+      tone({ f0: 494, dur: 0.16, type: 'triangle', gain: 0.18 });
+      tone({ f0: 740, dur: 0.22, type: 'triangle', gain: 0.16, at: 0.09 });
+    },
+    lootEpic: function () { // a purple beam — a small chord, blooming
+      [392, 587, 880].forEach(function (f, i) {
+        tone({ f0: f, dur: 0.3, type: 'triangle', gain: 0.16, at: i * 0.06 });
+      });
+      tone({ f0: 1175, dur: 0.3, type: 'sine', gain: 0.08, at: 0.2 });
+    },
+    godforged: function () { // GODFORGED — the legendary ceremony, an octave deeper and a bell on top
+      [262, 392, 523, 659, 784, 1046].forEach(function (f, i) {
+        tone({ f0: f, dur: 0.5, type: 'triangle', gain: 0.22, at: i * 0.11 });
+      });
+      tone({ f0: 131, dur: 1.1, type: 'sine', gain: 0.20, at: 0 });
+      tone({ f0: 1568, dur: 0.9, type: 'sine', gain: 0.14, at: 0.7 });
+      tone({ f0: 2093, dur: 0.7, type: 'sine', gain: 0.08, at: 0.78 });
+      noise({ dur: 0.7, gain: 0.05, ftype: 'highpass', freq: 7000, at: 0.2 });
+    },
+    boss: function () { // a boss's name-plate — a roar built from a falling saw and a drum of noise
+      tone({ f0: 220, f1: 55, dur: 0.9, type: 'sawtooth', gain: 0.26 });
+      tone({ f0: 110, f1: 41, dur: 1.1, type: 'square', gain: 0.14, at: 0.05 });
+      noise({ dur: 0.7, gain: 0.12, ftype: 'lowpass', freq: 500, at: 0.02 });
+      tone({ f0: 65, dur: 0.5, type: 'sine', gain: 0.24, at: 0.55 });
+    },
+    gatechoice: function () { // the gate stands open — two doors, two tones, a held breath between
+      tone({ f0: 330, dur: 0.4, type: 'sine', gain: 0.16 });
+      tone({ f0: 262, dur: 0.5, type: 'sine', gain: 0.14, at: 0.22 });
+    },
+    descend: function () { // down the stairs — a falling line, stone underfoot
+      [392, 330, 262, 196].forEach(function (f, i) {
+        tone({ f0: f, dur: 0.22, type: 'triangle', gain: 0.16, at: i * 0.11 });
+      });
+      noise({ dur: 0.3, gain: 0.05, ftype: 'lowpass', freq: 900, at: 0.1 });
+    },
+    ascend: function () { // up and out — the same stairs, climbed toward light
+      [196, 262, 330, 392].forEach(function (f, i) {
+        tone({ f0: f, dur: 0.22, type: 'triangle', gain: 0.16, at: i * 0.11 });
+      });
+      tone({ f0: 523, dur: 0.4, type: 'sine', gain: 0.12, at: 0.48 });
+    },
+    seize: function () { // THE CAPTOR takes your tool — a snatch: a rising grab and a lock clicking shut
+      tone({ f0: 300, f1: 900, dur: 0.16, type: 'sawtooth', gain: 0.16 });
+      noise({ dur: 0.08, gain: 0.14, ftype: 'bandpass', freq: 2600, q: 3, at: 0.14 });
+      tone({ f0: 180, f1: 60, dur: 0.25, type: 'square', gain: 0.16, at: 0.16 });
+    },
+    twin: function () { // a tool won back TWINNED — one strike, sounded twice, in harmony
+      tone({ f0: 659, dur: 0.18, type: 'triangle', gain: 0.18 });
+      tone({ f0: 659, dur: 0.18, type: 'triangle', gain: 0.18, at: 0.13 });
+      tone({ f0: 988, dur: 0.3, type: 'sine', gain: 0.12, at: 0.26 });
+    },
+    mercy: function () { // THE KEEPER'S MERCY — a single soft bell; the dark lets go
+      tone({ f0: 1046, dur: 0.8, type: 'sine', gain: 0.20 });
+      tone({ f0: 1568, dur: 0.5, type: 'sine', gain: 0.08, at: 0.03 });
+      tone({ f0: 523, dur: 0.9, type: 'sine', gain: 0.10, at: 0.1 });
+    },
+    dawn: function () { // THE SECOND DAWN — a sunrise in three rising notes over a warm floor
+      tone({ f0: 131, dur: 1.0, type: 'sine', gain: 0.16 });
+      [262, 392, 523].forEach(function (f, i) {
+        tone({ f0: f, dur: 0.55, type: 'triangle', gain: 0.16, at: 0.1 + i * 0.14 });
+      });
+      tone({ f0: 784, dur: 0.7, type: 'sine', gain: 0.10, at: 0.55 });
     }
   };
   function crack(gain, snaps) {
