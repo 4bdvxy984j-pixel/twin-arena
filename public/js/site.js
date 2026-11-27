@@ -39,6 +39,34 @@
     setInterval(refresh, 5000);
   }
 
+  // Mobile nav: at phone widths the links live behind the menu button —
+  // the brand and the link row never share a line again.
+  var navToggle = document.getElementById('navtoggle');
+  var topbar = document.querySelector('.topbar');
+  if (navToggle && topbar) {
+    navToggle.addEventListener('click', function () {
+      var open = topbar.classList.toggle('nav-open');
+      navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      navToggle.setAttribute('aria-label', open ? 'Close the menu' : 'Open the menu');
+    });
+  }
+
+  // THE ARMORY: grand on a session's first load — after that it folds to a
+  // one-line build summary so a returning fighter is never trapped behind
+  // the ceremony. The fold toggle always brings it back.
+  document.querySelectorAll('[data-armory]').forEach(function (el) {
+    var btn = el.querySelector('[data-armory-toggle]');
+    var setFold = function (folded) {
+      el.classList.toggle('folded', folded);
+      if (btn) btn.textContent = folded ? 'Unfold the armory' : 'Fold the armory';
+    };
+    var seen = false;
+    try { seen = sessionStorage.getItem('ta-armory-seen') === '1'; } catch (e) {}
+    if (seen) setFold(true);
+    try { sessionStorage.setItem('ta-armory-seen', '1'); } catch (e) {}
+    if (btn) btn.addEventListener('click', function () { setFold(!el.classList.contains('folded')); });
+  });
+
   // Sound: big doors tick (and wake the audio) on the way in.
   document.addEventListener('click', function (e) {
     var t = e.target && e.target.closest ? e.target.closest('.fightbtn') : null;

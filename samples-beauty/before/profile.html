@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Your Profile — THE TWIN ARENA</title>
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/sfx.js"></script>
+</head><body>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brandmark">◐</span> THE TWIN ARENA</a>
+  <nav><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/descent">The Descent</a><a href="/web">Evolution</a><a href="/profile">Delver</a> <a href="/auth/logout">Sign out</a><button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
+</header>
+<main>
+  <section class="profile">
+    <div class="p-head">
+      <div class="p-face ghost">◐</div>
+      <div>
+        <h1>Delver</h1>
+        <p class="dim">12 bouts · 7 breaches · 58% breach rate · streak +2 · best breach 1:36</p>
+        <p><strong>140</strong> mutation points · <strong>6</strong> evolutions · <a href="/web">open the web</a></p>
+        <p class="level-line"><strong>Level 6</strong> · <span class="classchip c2">Flare class</span> · 900 XP
+          <span class="xpbar"><i style="width:50%"></i></span> <span class="dim">150 XP to level 7 · XP is a track, never a currency</span></p>
+      </div>
+    </div>
+    <div class="cols">
+      <div class="panel">
+        <h2>Your face</h2>
+        <form method="post" action="/api/photo" enctype="multipart/form-data" class="uploadform">
+          <input type="file" name="photo" accept="image/png,image/jpeg,image/gif,image/webp" required>
+          <button type="submit">Upload photo</button>
+          <span class="dim">PNG/JPEG/GIF/WebP, up to 2 MB. It rides the leaderboard and the rail.</span>
+        </form>
+        <h2 class="mt">Your challenge link</h2>
+        <p class="dim">Anyone who opens this fights <em>your</em> Twin — the instance hardened against you. Their result lands on your grudge feed below.</p>
+        <p><code class="linkbox" id="challengelink">/challenge/94c10f1aed65993e8e2d</code>
+        <button class="ghostbtn" type="button" onclick="navigator.clipboard&&navigator.clipboard.writeText(location.origin+document.getElementById('challengelink').textContent)">Copy link</button></p>
+        <h2 class="mt">Settings</h2>
+        <form method="post" action="/api/profile/settings" class="authform slim">
+          <label>Display name<input name="displayName" value="Delver" maxlength="40"></label>
+          <label class="check"><input type="checkbox" name="publicProfile" checked> Show me on the public leaderboard</label>
+          <button type="submit">Save</button>
+        </form>
+        
+        <h2 class="mt">Your satchel — numbered editions</h2>
+        <ul class="items"><li class="itemline founder"><strong>THE FOUNDER&#39;S EMBER No. 1</strong> <span class="rarity founder">FOUNDER</span> · signed · the Keeper of the Arena</li><li class="itemline legendary"><strong>THE MIRROR WRAP No. 1</strong> <span class="rarity legendary">LEGENDARY</span> · signed · the Keeper of the Arena</li><li class="itemline epic"><strong>THE SECOND HEART No. 1</strong> <span class="rarity epic">EPIC</span> · signed · the Keeper of the Arena</li><li class="itemline epic"><strong>THE STILLBELL No. 1</strong> <span class="rarity epic">EPIC</span> · signed · the Keeper of the Arena</li><li class="itemline rare"><strong>ANCHOR STITCH No. 2</strong> <span class="rarity rare">RARE</span> · signed · the Keeper of the Arena</li></ul>
+        
+        
+        <h2 class="mt" id="satchel">The gear shelf — loot of the Descent</h2>
+        <div class="gear-row"><span class="gear-slot">Flood</span> <span class="tierbadge t-legendary">EMBERBRAND (LEGENDARY)</span> <form method="post" action="/api/gear/unwear" class="inlineform"><input type="hidden" name="slot" value="flood"><button class="ghostbtn" type="submit">Unwear</button></form></div><div class="gear-row"><span class="gear-slot">Probe</span> <span class="tierbadge t-rare">Lens of the Long Look (RARE)</span> <form method="post" action="/api/gear/unwear" class="inlineform"><input type="hidden" name="slot" value="probe"><button class="ghostbtn" type="submit">Unwear</button></form></div><div class="gear-row"><span class="gear-slot">Whisper</span> <span class="dim">bare</span></div><div class="gear-row"><span class="gear-slot">Decoy</span> <span class="dim">bare</span></div><div class="gear-row"><span class="gear-slot">Body relic</span> <span class="tierbadge t-epic">Plate of the Wall (EPIC)</span> <form method="post" action="/api/gear/unwear" class="inlineform"><input type="hidden" name="slot" value="body"><button class="ghostbtn" type="submit">Unwear</button></form></div>
+        <h3 class="boardh">In the satchel, unworn</h3><ul class="items"><li class="gearline t-epic"><strong>Whisper Choir of Ash</strong> <span class="tierbadge t-epic">EPIC</span> · Whisper<br><span class="dim">Whisper burn +30% · Whisper burns 5% trace on strike · Whisper cooldown −12%</span> <form method="post" action="/api/gear/wear" class="inlineform"><input type="hidden" name="gearId" value="g-choir"><button class="ghostbtn" type="submit">Wear it</button></form></li></ul>
+        <h3 class="boardh">GODFORGED treasures</h3><ul class="items"><li class="gearline t-godforged"><strong>THE DOUBLE HARVEST No. 1</strong> <span class="tierbadge t-godforged">GODFORGED</span> · signed · the Keeper of the Arena<br><span class="dim">Declared for a run: the first depth that drops loot drops it twice over.</span><br><span>Charges: <strong>2</strong> of 3 — declare it at the Descent's door.</span><br><span class="dim">Fired: Depth 9 — doubled</span></li></ul>
+        <p class="dim">Gear swaps happen here, between runs — never mid-delve. Your worn gear is your build: it rides your house fights and your Pit devil too, and your devil's card shows it. The Mirror Wrap and the Anchor Stitch are Pit treasures — they do not ride the Descent. Second Hearts and Stillbells are declared at the Descent's door.</p>
+      </div>
+      <div class="panel">
+        <h2>Your devil — standing in <a href="/pit">the Pit</a></h2>
+        <article class="pitcard  is-mirage">
+    <div class="pit-head">
+      <div class="p-face ghost small">◐</div>
+      <div class="pit-title">
+        <h3><a href="/fighter/5f7d47ccb9298f7c0c">Delver</a>'s devil</h3>
+        <p class="dim">Lv 6 · <span class="classchip c2">Flare class</span> <span class="badge mirage">MIRAGE-marked</span></p>
+      </div>
+      <div class="pit-bounty"><strong>61</strong><span>bounty pts</span></div>
+    </div>
+    <p class="taunt">“It learned from the best. You are not the best.”</p>
+    <p class="embermark">🔥 Founder's Ember No. 1 — one of the first hundred. Its holder earns +10% XP; the mark is the honor.</p>
+    <p class="pit-gear">Wearing: <span class="tierbadge t-legendary">EMBERBRAND · Flood (LEGENDARY)</span> <span class="tierbadge t-rare">Lens of the Long Look · Probe (RARE)</span> <span class="tierbadge t-epic">Plate of the Wall · Body (EPIC)</span></p>
+    <p class="pit-stats">Held <strong>4</strong> · breached <strong>1</strong> · last breached by Rival<br>
+    <span class="dim">Knows 0 challenger shapes · owner's web: 6 evolutions · No grudge armor yet — an unscarred devil</span></p>
+    <div class="pit-gate"></div>
+  </article>
+        <form method="post" action="/api/profile/taunt" class="authform slim">
+          <label>Your devil's taunt — one line, yours, shown on its card
+            <input name="taunt" value="It learned from the best. You are not the best." maxlength="90" placeholder="It learned from the best. You are not the best."></label>
+          
+          <button type="submit">Set the taunt</button>
+        </form>
+        <p class="dim">Your Pit record as a hunter: 0 bouts · 0 devils breached.</p>
+        <h2 class="mt">Your curriculum — what you taught it</h2>
+        <table class="curr"><thead><tr><th>Shape</th><th>Times taught</th><th>How known it is</th></tr></thead><tbody><tr><td colspan="3" class="dim">No shapes taught yet. Your first fight writes the first line.</td></tr></tbody></table>
+        <h2 class="mt">The grudge — your Twin, hardened against you</h2>
+        
+    <div class="armor-row"><span>Probe</span><div class="mini-bar armor"><i style="width:0%"></i></div><span>0% hardened</span></div>
+    <div class="armor-row"><span>Flood</span><div class="mini-bar armor"><i style="width:0%"></i></div><span>0% hardened</span></div>
+    <div class="armor-row"><span>Whisper</span><div class="mini-bar armor"><i style="width:0%"></i></div><span>0% hardened</span></div>
+    <div class="armor-row"><span>Decoy</span><div class="mini-bar armor"><i style="width:0%"></i></div><span>0% hardened</span></div>
+        <h2 class="mt">Challenges against your Twin</h2>
+        <ul class="feed"><li class="dim">Nobody has challenged your Twin yet. Send the link and wait.</li></ul>
+      </div>
+    </div>
+  </section></main>
+<footer class="foot">
+  <p>A game about Gatekeeper's Twin — the sparring partner that learns. Every fight here teaches it a shape;
+  every shape makes the next fighter's road harder. Play is asynchronous: you fight the Twin other fighters educated,
+  and other fighters will meet the one you educate. No live player-versus-player — the opponent is the Twin, and it is enough.</p>
+</footer>
+<script src="/js/site.js"></script>
+</body></html>

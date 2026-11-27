@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Descent — THE TWIN ARENA</title>
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/sfx.js"></script>
+</head><body>
+<div class="embers" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brandmark">◐</span> THE TWIN ARENA</a>
+  <button id="navtoggle" class="navtoggle" type="button" aria-expanded="false" aria-controls="topnav" aria-label="Open the menu">☰</button>
+  <nav id="topnav"><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/descent">The Descent</a><a href="/web">Evolution</a><a href="/profile">Delver</a> <a href="/auth/logout">Sign out</a><button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
+</header>
+<main>
+  <section class="descent-wrap">
+    
+    <div class="descent-hero">
+      <div class="descent-arch" aria-hidden="true">⛪</div>
+      <h1>THE DESCENT</h1>
+      <p class="lede">Beneath the arena there are stairs, and at the bottom of the stairs there is loot, and between you and the loot there is the Twin — on her home ground, learning your build as you go.</p>
+      <p class="dim">Crack each depth's gate and choose: <strong>descend</strong> for better drops and a meaner dark, or <strong>ascend</strong> and bank what you carry. Your integrity and your Trace carry across the whole run. Bosses guard every third depth and pay the best loot in the house; every fifth depth is a Vault — no gate, no strikes, only fleeing shapes and drop rolls. Death takes your unbanked STURDY and RARE pieces; EPIC, LEGENDARY and GODFORGED always come home. Solo and asynchronous, server-refereed like every bout here — no live PvP, and the loot counts on this page are the real books.</p>
+      <p class="dim">And she is learning <em>you</em>, specifically: lean on a tool — above all a LEGENDARY one — and the deeper you go, the more she scrambles it on sight. Stated plainly, like everything in this house.</p>
+    </div>
+    
+    <div class="descent-record">
+      <div><strong>3</strong><span>runs</span></div>
+      <div><strong>Depth 6</strong><span>deepest</span></div>
+      <div><strong>1770</strong><span>best score</span></div>
+      <div><strong>320</strong><span>richest haul</span></div>
+      <div><strong>2</strong><span>bosses slain</span></div>
+    </div>
+    <div class="hud">
+      <div class="hudcell"><label>GATE</label><div class="bar hp"><i id="hpbar"></i></div><span id="hptext">100</span></div>
+      <div class="hudcell"><label>INTEGRITY</label><div class="bar int"><i id="intbar"></i></div><span id="inttext">100</span></div>
+      <div class="hudcell timer"><label>TIME</label><span id="clock">2:00</span></div>
+      <div class="hudcell"><label>ENERGY</label><div class="bar en"><i id="enbar"></i></div><span id="entext">100</span></div>
+      <div class="hudcell"><label>TRACE</label><div class="bar trace" id="tracewrap"><i id="tracebar"></i></div><span id="tracetext">0%</span></div>
+    </div>
+    <div class="runline" id="runline">Depth — · Score 0 · Carrying nothing</div>
+    <div class="stage descent-stage">
+      <canvas id="gate" width="900" height="560"></canvas>
+      <div id="lootlayer" class="lootlayer"></div>
+      <div id="bossplate" class="bossplate hidden"></div>
+      <div id="depthbanner" class="depthbanner hidden"></div>
+      <div id="gatechoice" class="gatechoice hidden">
+        <h2>THE GATE STANDS OPEN</h2>
+        <p id="gatechoice-text">The way down is darker and richer. The way up banks everything you carry.</p>
+        <div class="gatechoice-btns">
+          <button id="descend-btn" class="fightbtn descend" type="button">▼ DESCEND DEEPER</button>
+          <button id="ascend-btn" class="fightbtn ascend" type="button">▲ ASCEND &amp; BANK</button>
+        </div>
+      </div>
+      <div id="winframe" class="winframe hidden"><span id="winframe-label">OPEN WINDOW ×2</span><i id="winframe-bar"></i></div>
+      <div id="stage-msg" class="stage-msg">
+        <h2>The stairs are waiting, Delver.</h2>
+        <p>Your full Command Deck goes down with you — tool pods, abilities, the parry plate — plus whatever your tools are wearing. Declare your treasures, then take the first step.</p>
+        <div class="armory" data-armory>
+    <div class="armory-head"><span class="armory-title">⚔ THE ARMORY — YOUR BUILD, LOADED</span><button class="ghostbtn armory-toggle" type="button" data-armory-toggle>Fold the armory</button></div>
+    <div class="armory-body">
+      <div class="armory-stands"><div class="stand r-legendary"><span class="stand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5v3.5"/><path d="M5.5 4.5l2 2.5M18.5 4.5l-2 2.5"/><path d="M2.5 14.5c2.4 0 2.4 1.8 4.8 1.8s2.4-1.8 4.8-1.8 2.4 1.8 4.8 1.8 2.4-1.8 4.6-1.8"/><path d="M2.5 19c2.4 0 2.4 1.8 4.8 1.8S9.7 19 12.1 19s2.4 1.8 4.8 1.8 2.4-1.8 4.6-1.8"/></svg></span><span class="stand-slot">Flood</span><strong class="stand-name">EMBERBRAND</strong><span class="tierbadge t-legendary">LEGENDARY No. 1</span><span class="stand-affixes">Flood damage +20% · Flood splashes +4 onto a second shape · Flood trace −3 per strike · Unique: your Floods ignite the gate — a slow burn rides every strike.</span></div><div class="stand r-rare"><span class="stand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="stand-slot">Probe</span><strong class="stand-name">Lens of the Long Look</strong><span class="tierbadge t-rare">RARE</span><span class="stand-affixes">Marks last +50% longer · The Twin&#39;s familiarity with your Probe grows 40% slower</span></div><div class="stand bare"><span class="stand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="12" r="1.7" fill="currentColor" stroke="none"/><path d="M12.5 8.8a4.6 4.6 0 0 1 0 6.4M15.8 6.2a8.4 8.4 0 0 1 0 11.6M19 3.8a12.2 12.2 0 0 1 0 16.4"/></svg></span><span class="stand-slot">Whisper</span><strong class="stand-name dim">BARE</strong><span class="stand-affixes dim">nothing worn — the depths provide</span></div><div class="stand bare"><span class="stand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 21v-7.5a7.5 7.5 0 0 1 15 0V21"/><path d="M9.3 21v-4.8a2.7 2.7 0 0 1 5.4 0V21"/><path d="M2.5 21h19"/></svg></span><span class="stand-slot">Decoy</span><strong class="stand-name dim">BARE</strong><span class="stand-affixes dim">nothing worn — the depths provide</span></div><div class="stand r-epic"><span class="stand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8 19 5v6c0 4.8-3 8.4-7 10.2C8 19.4 5 15.8 5 11V5Z"/><path d="M12 6.2v11.4M7.6 9.2h8.8"/></svg></span><span class="stand-slot">Body relic</span><strong class="stand-name">Plate of the Wall</strong><span class="tierbadge t-epic">EPIC</span><span class="stand-affixes">+25 max integrity · Trace cools +0.5%/s faster · Parry window +200ms wider</span></div></div>
+      <h4 class="armory-sub">On the shelf — treasures of the house</h4><ul class="armory-shelf"><li class="shelfline founder"><strong>THE FOUNDER&#39;S EMBER</strong> <span class="rarity founder">FOUNDER</span> <span class="dim">· yours: No. 1</span></li><li class="shelfline legendary"><strong>THE MIRROR WRAP</strong> <span class="rarity legendary">LEGENDARY</span> <span class="dim">· yours: No. 1</span></li><li class="shelfline epic"><strong>THE SECOND HEART</strong> <span class="rarity epic">EPIC</span> <span class="dim">· yours: No. 1</span></li><li class="shelfline epic"><strong>THE STILLBELL</strong> <span class="rarity epic">EPIC</span> <span class="dim">· yours: No. 1</span></li><li class="shelfline rare"><strong>ANCHOR STITCH</strong> <span class="rarity rare">RARE</span> <span class="dim">· yours: No. 2</span></li><li class="shelfline godforged"><strong>THE DOUBLE HARVEST No. 1</strong> <span class="tierbadge t-godforged">GODFORGED</span> <span class="dim">· charges: 2 of 3</span></li></ul>
+      <h4 class="armory-sub">Abilities lit</h4><div class="armory-abilities"><span class="ability-chip"><i style="background:#ff2a6d"></i>✦ OVERDRIVE</span><span class="ability-chip"><i style="background:#b967ff"></i>✦ GHOST</span><span class="ability-chip"><i style="background:#00e5ff"></i>✦ RAPID CYCLING</span></div>
+    </div>
+    <p class="armory-line" data-armory-line>Build: EMBERBRAND · Lens of the Long Look · Plate of the Wall · 6 treasures shelved · 3 abilities lit</p>
+  </div>
+        <p class="dim wornline">Gear swaps happen at <a href="/profile#satchel">your satchel</a>, between runs — never mid-delve.</p>
+        <div class="itempanel"><h3>Declared at the door — spent only as the design says</h3><label class="check itemopt epic"><input type="checkbox" id="item-heart"> 💔 Declare <strong>THE SECOND HEART</strong> <span class="rarity epic">EPIC</span> — yours: No. 1. Once per run, the blow that would end you breaks it instead. Unbroken, it returns.</label><label class="check itemopt epic"><input type="checkbox" id="item-bell"> 🔔 Declare <strong>THE STILLBELL</strong> <span class="rarity epic">EPIC</span> — yours: No. 1. Ring it mid-depth and the Trace cannot rise for 12 seconds. Unrung, it returns.</label><label class="itemopt godopt">✦ Declare one <strong>GODFORGED</strong> treasure — charges are spent only when its power fires:
+      <select id="god-select"><option value="">— carry none —</option><option value="g-harvest">THE DOUBLE HARVEST No. 1 — 2 charges</option></select></label></div>
+        <button id="startbtn" class="fightbtn">▼ BEGIN THE DESCENT</button>
+        <p class="dim">A run abandoned from this door banks its haul like an ascent — the Keeper is not cruel, but the dark keeps its own ledger below.</p>
+      </div>
+      <div id="verdict" class="verdict hidden"></div>
+    </div>
+    <div id="twinread" class="twinread">The dark is reading you…</div>
+    <button id="parrybtn" class="parrybtn" type="button" disabled><span class="parry-charge" id="parry-charge"></span>⚡ PARRY<span>tap when it winds up — or tap the optic, or hit SPACE</span></button>
+    <div class="kit" id="kit"></div>
+    <div class="kit abilities" id="abilities"></div>
+    <div class="haulfeed panel"><h2>Carried haul — unbanked until you ascend or a boss falls</h2><ul id="haulfeed"><li class="dim">Empty hands. The depths provide.</li></ul>
+    <p><button id="abandonbtn" class="ghostbtn hidden" type="button">Abandon the run — ascend with what you carry</button></p></div>
+    
+    <div class="panel descent-boards">
+      <h2>The delve boards</h2>
+      <p class="dim">3 runs · 14 depths cleared · 2 bosses slain · 1 deaths in the dark · 1 LEGENDARY pieces banked · <strong>1 GODFORGED in the world</strong>.</p>
+      <h3 class="boardh">Deepest depth</h3><ul class="board"><li><a href="/fighter/5f7d47ccb9298f7c0c"><span class="lname">Delver</span><span class="lstat">Depth 6</span></a></li></ul>
+      <h3 class="boardh">Highest score</h3><ul class="board"><li><a href="/fighter/5f7d47ccb9298f7c0c"><span class="lname">Delver</span><span class="lstat">1770 pts</span></a></li></ul>
+      <h3 class="boardh">Richest haul banked</h3><ul class="board"><li><a href="/fighter/5f7d47ccb9298f7c0c"><span class="lname">Delver</span><span class="lstat">320</span></a></li></ul>
+    </div>
+    <div class="arena-foot">
+      <span>Bosses stand at Depths 3, 6, 9, 12 and onward — the Captor, the Accountant, the Mirror, the Undertaker, and then they come again, deeper. Vaults open at Depths 5, 10, 15… GODFORGED treasures fall only from bosses at Depth 9 and deeper, at a few percent — 1 exist in the world as of this page.</span>
+      <button id="mutebtn" class="ghostbtn" type="button">Sound: on</button>
+    </div>
+  </section>
+  <script>window.TA_DESCENT = true;</script>
+  <script src="/js/descent.js"></script></main>
+<footer class="foot">
+  <p>A game about Gatekeeper's Twin — the sparring partner that learns. Every fight here teaches it a shape;
+  every shape makes the next fighter's road harder. Play is asynchronous: you fight the Twin other fighters educated,
+  and other fighters will meet the one you educate. No live player-versus-player — the opponent is the Twin, and it is enough.</p>
+</footer>
+<script src="/js/site.js"></script>
+</body></html>

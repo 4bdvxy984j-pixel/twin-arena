@@ -38,6 +38,14 @@
     var s = Math.max(0, Math.ceil(ms / 1000));
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
+  function escHtml(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]; }); }
+  // Tool sigils — the same four marks the Armory stands carry (views.js).
+  var TOOL_ICONS = {
+    probe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+    flood: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5v3.5"/><path d="M5.5 4.5l2 2.5M18.5 4.5l-2 2.5"/><path d="M2.5 14.5c2.4 0 2.4 1.8 4.8 1.8s2.4-1.8 4.8-1.8 2.4 1.8 4.8 1.8 2.4-1.8 4.6-1.8"/><path d="M2.5 19c2.4 0 2.4 1.8 4.8 1.8S9.7 19 12.1 19s2.4 1.8 4.8 1.8 2.4-1.8 4.6-1.8"/></svg>',
+    whisper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="12" r="1.7" fill="currentColor" stroke="none"/><path d="M12.5 8.8a4.6 4.6 0 0 1 0 6.4M15.8 6.2a8.4 8.4 0 0 1 0 11.6M19 3.8a12.2 12.2 0 0 1 0 16.4"/></svg>',
+    decoy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 21v-7.5a7.5 7.5 0 0 1 15 0V21"/><path d="M9.3 21v-4.8a2.7 2.7 0 0 1 5.4 0V21"/><path d="M2.5 21h19"/></svg>'
+  };
   function elapsed() { return performance.now() - S.startedAt; }
 
   // ---------- start ----------
@@ -119,10 +127,12 @@
       b.className = 'tool'; b.id = 'tool-' + id;
       b.style.setProperty('--tc', t.color);
       var traceTxt = t.trace > 0 ? '+' + t.trace + '% trace' : (t.trace < 0 ? t.trace + '% trace' : 'no trace');
-      b.innerHTML = '<span class="tname" style="color:' + t.color + '">' + t.name + '</span>' +
+      b.innerHTML = '<span class="ticon">' + (TOOL_ICONS[id] || '') + '</span>' +
+        '<span class="tname" style="color:' + t.color + '">' + t.name + '</span>' +
         '<span class="tdmg">DMG ' + t.dmg + (t.dot ? ' +' + t.dot + '/s burn' : '') + '</span>' +
         '<span class="tcost">' + t.cost + ' energy · ' + (t.cooldown / 1000).toFixed(1) + 's</span>' +
         '<span class="ttrace" style="color:' + (t.trace > 0 ? '#ff2a6d' : '#5dffa0') + '">' + traceTxt + '</span>' +
+        (t.gear ? '<span class="tgear">⚜ ' + escHtml(t.gear.name) + ' (' + escHtml(t.gear.tier) + ')</span>' : '') +
         '<span class="tfam">Twin familiarity <b data-fam>' + Math.round(t.familiarity * 100) + '%</b></span>' +
         '<span class="noenergy hidden">not enough energy</span>' +
         '<span class="cdveil"></span>';

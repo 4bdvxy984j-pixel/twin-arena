@@ -6,6 +6,10 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Drifting embers — one ambient layer for the whole house, neon yard and
+// gothic deep alike. Pure CSS sparks (capped count, reduced-motion safe).
+const EMBERS_HTML = `<div class="embers" aria-hidden="true">${'<i></i>'.repeat(14)}</div>`;
+
 function shell(title, body, me) {
   const who = me && me.email
     ? `<a href="/profile">${me.photo ? `<img class="navface" src="${esc(me.photo)}" alt="">` : ''}${esc(me.displayName || 'Fighter')}</a> <a href="/auth/logout">Sign out</a>`
@@ -17,9 +21,11 @@ function shell(title, body, me) {
 <link rel="stylesheet" href="/css/style.css">
 <script src="/js/sfx.js"></script>
 </head><body>
+${EMBERS_HTML}
 <header class="topbar">
   <a class="brand" href="/"><span class="brandmark">◐</span> THE TWIN ARENA</a>
-  <nav><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/descent">The Descent</a><a href="/web">Evolution</a>${who}<button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
+  <button id="navtoggle" class="navtoggle" type="button" aria-expanded="false" aria-controls="topnav" aria-label="Open the menu">☰</button>
+  <nav id="topnav"><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/descent">The Descent</a><a href="/web">Evolution</a>${who}<button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
 </header>
 <main>${body}</main>
 <footer class="foot">
@@ -70,6 +76,65 @@ function spotlightHtml(state) {
     </div>
     <a class="fightbtn" href="/challenge/${esc(owner.challengeToken)}">⚔&nbsp; FIGHT THE DEVIL</a>
   </section>`;
+}
+
+// ---- THE ARMORY — the fighter's build, loaded with ceremony -------------
+// Presentation only: every line below is read off the fighter's real record
+// (worn gear, satchel items, GODFORGED treasures, evolved abilities) — the
+// same build the referee will settle. Grand on a session's first load;
+// site.js folds it to a one-line summary after that, one tap to unfold.
+const TOOL_ICONS = {
+  probe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  flood: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5v3.5"/><path d="M5.5 4.5l2 2.5M18.5 4.5l-2 2.5"/><path d="M2.5 14.5c2.4 0 2.4 1.8 4.8 1.8s2.4-1.8 4.8-1.8 2.4 1.8 4.8 1.8 2.4-1.8 4.6-1.8"/><path d="M2.5 19c2.4 0 2.4 1.8 4.8 1.8S9.7 19 12.1 19s2.4 1.8 4.8 1.8 2.4-1.8 4.6-1.8"/></svg>',
+  whisper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="12" r="1.7" fill="currentColor" stroke="none"/><path d="M12.5 8.8a4.6 4.6 0 0 1 0 6.4M15.8 6.2a8.4 8.4 0 0 1 0 11.6M19 3.8a12.2 12.2 0 0 1 0 16.4"/></svg>',
+  decoy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 21v-7.5a7.5 7.5 0 0 1 15 0V21"/><path d="M9.3 21v-4.8a2.7 2.7 0 0 1 5.4 0V21"/><path d="M2.5 21h19"/></svg>',
+  body: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8 19 5v6c0 4.8-3 8.4-7 10.2C8 19.4 5 15.8 5 11V5Z"/><path d="M12 6.2v11.4M7.6 9.2h8.8"/></svg>'
+};
+function toolIcon(id) { return TOOL_ICONS[id] || TOOL_ICONS.body; }
+
+function armoryHtml(p) {
+  if (!p || !p.email) return '';
+  const worn = game.wornGearMap(p);
+  const stands = game.GEAR_SLOTS.map(slot => {
+    const g = worn[slot];
+    const label = slot === 'body' ? 'Body relic' : TOOLS[slot].name;
+    if (!g) {
+      return `<div class="stand bare"><span class="stand-icon">${toolIcon(slot)}</span><span class="stand-slot">${label}</span><strong class="stand-name dim">BARE</strong><span class="stand-affixes dim">nothing worn — the depths provide</span></div>`;
+    }
+    const tier = String(g.tier || 'STURDY').toUpperCase();
+    const affixes = game.gearLine(g).map(esc).join(' · ');
+    return `<div class="stand r-${tier.toLowerCase()}"><span class="stand-icon">${toolIcon(slot)}</span><span class="stand-slot">${label}</span><strong class="stand-name">${esc(g.name)}</strong><span class="tierbadge t-${tier.toLowerCase()}">${tier}${g.serial ? ' No. ' + g.serial : ''}</span>${affixes ? `<span class="stand-affixes">${affixes}</span>` : ''}</div>`;
+  }).join('');
+  const stock = p.itemStock || {};
+  const shelf = [];
+  for (const itemId of Object.keys(game.ITEMS)) {
+    const serials = stock[itemId] || [];
+    if (!serials.length) continue;
+    const it = game.ITEMS[itemId];
+    shelf.push(`<li class="shelfline ${it.rarity.toLowerCase()}"><strong>${esc(it.name)}</strong> <span class="rarity ${it.rarity.toLowerCase()}">${it.rarity}</span> <span class="dim">· yours: ${serials.map(n => 'No. ' + n).join(', ')}</span></li>`);
+  }
+  const gods = (p.gear || []).filter(g => g.tier === 'GODFORGED');
+  for (const g of gods) {
+    shelf.push(`<li class="shelfline godforged"><strong>${esc(g.name)} No. ${g.serial}</strong> <span class="tierbadge t-godforged">GODFORGED</span> <span class="dim">· ${g.retired ? 'spent out — its number rests in your record' : `charges: ${g.charges} of ${g.chargesMax}`}</span></li>`);
+  }
+  const abilities = Object.keys(game.ABILITIES)
+    .filter(aid => p.nodes && p.nodes[game.ABILITIES[aid].node])
+    .map(aid => `<span class="ability-chip"><i style="background:${game.ABILITIES[aid].color}"></i>✦ ${esc(game.ABILITIES[aid].name)}</span>`)
+    .join('');
+  const wornNames = game.GEAR_SLOTS.filter(s => worn[s]).map(s => worn[s].name);
+  const lineBits = [];
+  lineBits.push(wornNames.length ? 'Build: ' + wornNames.join(' · ') : 'Build: bare tools, no gear worn');
+  if (shelf.length) lineBits.push(shelf.length + ' treasure' + (shelf.length === 1 ? '' : 's') + ' shelved');
+  if (abilities) lineBits.push(Object.keys(game.ABILITIES).filter(aid => p.nodes && p.nodes[game.ABILITIES[aid].node]).length + ' abilities lit');
+  return `<div class="armory" data-armory>
+    <div class="armory-head"><span class="armory-title">⚔ THE ARMORY — YOUR BUILD, LOADED</span><button class="ghostbtn armory-toggle" type="button" data-armory-toggle>Fold the armory</button></div>
+    <div class="armory-body">
+      <div class="armory-stands">${stands}</div>
+      ${shelf.length ? `<h4 class="armory-sub">On the shelf — treasures of the house</h4><ul class="armory-shelf">${shelf.join('')}</ul>` : ''}
+      ${abilities ? `<h4 class="armory-sub">Abilities lit</h4><div class="armory-abilities">${abilities}</div>` : ''}
+    </div>
+    <p class="armory-line" data-armory-line>${esc(lineBits.join(' · '))}</p>
+  </div>`;
 }
 
 function railText(f) {
@@ -240,6 +305,7 @@ function arenaPage(state, me, challenge, pit) {
         <p>Your command deck is below: four tool pods, your evolution abilities, one big parry plate. It learns every shape you show it — and it throws back. Parry the wind-up. Mind your trace.</p>
         ${itemPanel}
         ${gearPanel}
+        ${armoryHtml(me)}
         <button id="startbtn" class="fightbtn">BEGIN THE BREACH</button>
       </div>
       <div id="verdict" class="verdict hidden"></div>
@@ -676,11 +742,7 @@ function descentPage(state, me) {
   } else if (godPieces.length) {
     decl.push('<p class="dim">✦ Your GODFORGED treasures are spent out — their numbers rest in your collection record.</p>');
   }
-  const worn = game.wornGearMap(me);
-  const wornList = game.GEAR_SLOTS.filter(s => worn[s]).map(s => worn[s]);
-  const wornLine = wornList.length
-    ? `<p class="wornline">Your build going down: ${wornList.map(g => `<span class="tierbadge t-${g.tier.toLowerCase()}">${esc(g.name)} · ${g.slot === 'body' ? 'Body' : TOOLS[g.slot].name} (${g.tier})</span>`).join(' ')} <span class="dim">— swap gear at <a href="/profile#satchel">your satchel</a>, between runs.</span></p>`
-    : '<p class="dim">Your tools go down bare — no gear worn. What the depths drop, you keep; wear it at <a href="/profile#satchel">your satchel</a>.</p>';
+  const wornLine = `<p class="dim wornline">Gear swaps happen at <a href="/profile#satchel">your satchel</a>, between runs — never mid-delve.</p>`;
   const body = `
   <section class="descent-wrap">
     ${hero}
@@ -717,6 +779,7 @@ function descentPage(state, me) {
       <div id="stage-msg" class="stage-msg">
         <h2>The stairs are waiting, ${esc(me.displayName || 'fighter')}.</h2>
         <p>Your full Command Deck goes down with you — tool pods, abilities, the parry plate — plus whatever your tools are wearing. Declare your treasures, then take the first step.</p>
+        ${armoryHtml(me)}
         ${wornLine}
         ${decl.length ? `<div class="itempanel"><h3>Declared at the door — spent only as the design says</h3>${decl.join('')}</div>` : ''}
         <button id="startbtn" class="fightbtn">▼ BEGIN THE DESCENT</button>

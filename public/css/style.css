@@ -5,6 +5,20 @@
   --ink:#e9f4ff; --dim:#8b98a9; --line:#232b3a;
   --cyan:#00e5ff; --pink:#ff2a6d; --mag:#ff2a6d; --violet:#b967ff; --gold:#fcee0a; --yellow:#fcee0a;
   --good:#5dffa0; --bad:#ff4655;
+  /* THE BEAUTY PASS — one system, two registers: the Arena's neon and the
+     Descent's gothic ember share these tokens. Rarity colors are the same
+     everywhere a tier is named: stands, badges, beams, cards. */
+  --r-sturdy:#cfd6dd; --r-rare:#3fa9ff; --r-epic:#b967ff; --r-legendary:#ffd700;
+  --r-godforged:#fff3c4; --r-founder:#ff9a3c;
+  --ember:#ff7a2a; --ember-deep:#c22e12; --oldgold:#d8a441; --parchment:#ffe9a8;
+  --font-display:"Palatino Linotype","Book Antiqua",Palatino,Georgia,"Times New Roman",serif;
+  /* layered stone-and-steel panel surface: brushed diagonal, pitted speckle,
+     then the house gradient — texture with zero image files */
+  --panelbg:
+    repeating-linear-gradient(115deg, rgba(255,255,255,.014) 0 2px, transparent 2px 7px),
+    radial-gradient(340px 130px at 18% -10%, rgba(255,255,255,.05), transparent 70%),
+    radial-gradient(260px 120px at 88% 115%, rgba(0,0,0,.35), transparent 70%),
+    linear-gradient(180deg, var(--panel2), var(--panel));
   --cut:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
 }
 *{box-sizing:border-box}
@@ -13,11 +27,13 @@ body{
   background:
     linear-gradient(rgba(0,229,255,.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0,229,255,.035) 1px, transparent 1px),
-    radial-gradient(1100px 620px at 50% -10%, #14202e 0%, var(--bg) 58%) fixed, var(--bg);
-  background-size:56px 56px, 56px 56px, auto, auto;
+    radial-gradient(1100px 620px at 50% -10%, #14202e 0%, var(--bg) 58%),
+    radial-gradient(900px 500px at 85% 112%, rgba(255,90,40,.05), transparent 60%) fixed, var(--bg);
+  background-size:56px 56px, 56px 56px, auto, auto, auto;
   color:var(--ink); font-family:"Segoe UI","Avenir Next",system-ui,-apple-system,sans-serif;
   min-height:100vh; -webkit-tap-highlight-color:transparent;
 }
+h1,h2{font-family:var(--font-display)}
 /* scanline + grain veil over everything */
 body::after{content:""; position:fixed; inset:0; pointer-events:none; z-index:60;
   background:repeating-linear-gradient(0deg, rgba(255,255,255,.022) 0 1px, transparent 1px 3px);
@@ -43,22 +59,41 @@ code{background:#131a26; border:1px solid var(--line); padding:.1em .4em; font-s
   95%{transform:translate(-1px,0); clip-path:inset(30% 0 40% 0)}
 }
 
-/* top bar — cyberdeck chrome */
-.topbar{display:flex; justify-content:space-between; align-items:center; padding:.7rem 1.1rem;
+/* top bar — cyberdeck chrome. THE BEAUTY PASS rebuilt this bar: at phone
+   widths the brand and the link row used to wrap into each other and stack
+   (Steven's own screenshot showed the collision). Now the bar is one clean
+   row — brand left, menu button right — and the links fold into a dropdown
+   panel under the bar. Desktop keeps the full row, unchanged. */
+.topbar{display:flex; justify-content:space-between; align-items:center; gap:.8rem; padding:.7rem 1.1rem;
   border-bottom:2px solid var(--yellow); background:rgba(5,5,8,.88); backdrop-filter:blur(8px);
-  position:sticky; top:0; z-index:20}
-.brand{color:var(--ink); text-decoration:none; font-weight:900; letter-spacing:.16em; font-style:italic}
+  position:sticky; top:0; z-index:30}
+.brand{color:var(--ink); text-decoration:none; font-weight:900; letter-spacing:.16em; font-style:italic;
+  font-family:var(--font-display); white-space:nowrap; min-width:0; overflow:hidden; text-overflow:ellipsis}
 .brandmark{color:var(--yellow); font-size:1.25em; text-shadow:0 0 14px var(--yellow); font-style:normal}
-.topbar nav{display:flex; gap:1.1rem; align-items:center; flex-wrap:wrap}
-.topbar nav a{color:var(--dim); text-decoration:none; font-weight:700; text-transform:uppercase; font-size:.85rem; letter-spacing:.08em}
+.navtoggle{display:none; background:transparent; color:var(--ink); border:1px solid var(--line);
+  width:42px; height:42px; font-size:1.15rem; cursor:pointer; flex:0 0 auto; line-height:1}
+.navtoggle:hover{border-color:var(--yellow); color:var(--yellow)}
+.topbar nav{display:flex; gap:1.1rem; align-items:center; flex-wrap:nowrap}
+.topbar nav a{color:var(--dim); text-decoration:none; font-weight:700; text-transform:uppercase; font-size:.85rem; letter-spacing:.08em; white-space:nowrap}
 .topbar nav a:hover{color:var(--yellow)}
 .navcta{color:var(--yellow) !important}
 .navface{width:22px;height:22px;border-radius:0;object-fit:cover;vertical-align:-6px;margin-right:.35rem;border:1px solid var(--cyan)}
+@media(max-width:900px){
+  .topbar{flex-wrap:wrap}
+  .navtoggle{display:block}
+  .topbar nav{display:none; flex-basis:100%; flex-direction:column; align-items:stretch; gap:0;
+    border-top:1px solid var(--line); margin-top:.55rem; padding-top:.35rem}
+  .topbar.nav-open nav{display:flex}
+  .topbar nav a{padding:.62rem .2rem; font-size:.95rem; border-bottom:1px dashed #1c2432}
+  .topbar nav a:last-of-type{border-bottom:0}
+  .topbar nav .soundbtn{align-self:flex-start; margin:.55rem 0 .3rem}
+}
 main{max-width:1060px; margin:0 auto; padding:1.2rem 1rem 3rem}
 .foot{border-top:1px solid var(--line); color:var(--dim); font-size:.85rem; padding:1.2rem; max-width:1060px; margin:0 auto}
 
 /* hero */
-.hero{text-align:center; padding:2.2rem 0 1rem}
+.hero{text-align:center; padding:2.2rem 0 1rem;
+  background:radial-gradient(760px 320px at 50% -4%, rgba(255,122,26,.08), transparent 70%)}
 .hero h1{font-size:clamp(2.1rem,6vw,3.6rem); line-height:1.02; margin:.4rem 0 .8rem; font-style:italic}
 .hero h1 em{font-style:italic; color:var(--yellow); text-shadow:3px 0 rgba(255,42,109,.6), -3px 0 rgba(0,229,255,.6), 0 0 26px rgba(252,238,10,.35)}
 .lede{color:var(--dim); font-size:1.08rem; max-width:620px; margin:0 auto 1.4rem}
@@ -87,7 +122,7 @@ main{max-width:1060px; margin:0 auto; padding:1.2rem 1rem 3rem}
 /* panels */
 .cols{display:grid; grid-template-columns:1fr 1fr; gap:1.1rem; margin-top:2rem}
 @media(max-width:820px){.cols{grid-template-columns:1fr}}
-.panel{background:linear-gradient(180deg, var(--panel2), var(--panel)); border:1px solid var(--line); border-left:3px solid var(--cyan);
+.panel{background:var(--panelbg); border:1px solid var(--line); border-left:3px solid var(--cyan);
   padding:1.1rem 1.2rem; box-shadow:0 10px 30px rgba(0,0,0,.5); clip-path:var(--cut)}
 .panel h2{margin:.1rem 0 .8rem; font-size:1.02rem; letter-spacing:.08em}
 .live-dot{display:inline-block; width:8px; height:8px; background:var(--good);
@@ -138,7 +173,7 @@ main{max-width:1060px; margin:0 auto; padding:1.2rem 1rem 3rem}
 .decksub{font-size:.85rem; color:var(--yellow); letter-spacing:.22em; font-style:normal; vertical-align:middle}
 .deckgrid{display:grid; grid-template-columns:1fr 1fr; gap:1.1rem; margin-top:1.1rem}
 @media(max-width:820px){.deckgrid{grid-template-columns:1fr}}
-.deckpanel{background:linear-gradient(180deg, var(--panel2), var(--panel)); border:1px solid var(--line);
+.deckpanel{background:var(--panelbg); border:1px solid var(--line);
   border-top:3px solid var(--cyan); padding:1.1rem 1.2rem; margin-top:1.1rem; clip-path:var(--cut);
   box-shadow:0 10px 30px rgba(0,0,0,.5)}
 .deckgrid .deckpanel{margin-top:0}
@@ -205,33 +240,59 @@ main{max-width:1060px; margin:0 auto; padding:1.2rem 1rem 3rem}
 #tracetext.hot{color:var(--bad); animation:tracestutter .28s steps(2) infinite}
 @keyframes tracestutter{0%{transform:translate(0)}50%{transform:translate(1.5px,-1px)}100%{transform:translate(-1.5px,1px)}}
 .stage{position:relative; border:1px solid var(--line); border-top:3px solid var(--mag); overflow:hidden;
-  background:radial-gradient(700px 420px at 50% 40%, #101623 0%, rgba(8,8,10,0) 70%), #07080c;
-  box-shadow:0 18px 50px rgba(0,0,0,.6), inset 0 0 80px rgba(0,229,255,.05)}
+  background:
+    repeating-linear-gradient(115deg, rgba(255,255,255,.016) 0 2px, transparent 2px 7px),
+    radial-gradient(700px 420px at 50% 40%, #101623 0%, rgba(8,8,10,0) 70%),
+    radial-gradient(500px 200px at 50% 108%, rgba(255,90,40,.07), transparent 70%), #07080c;
+  box-shadow:0 18px 50px rgba(0,0,0,.6), inset 0 0 80px rgba(0,229,255,.05), inset 0 -46px 60px rgba(0,0,0,.5)}
 .stage::after{content:""; position:absolute; inset:0; pointer-events:none;
   background:repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, transparent 1px 3px)}
 .stage canvas{display:block; width:100%; height:auto; touch-action:none}
-.stage-msg{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
-  text-align:center; background:rgba(4,4,8,.5); padding:1rem; z-index:2}
+.stage-msg{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+  text-align:center; background:rgba(4,4,8,.5); padding:1rem; z-index:2; overflow-y:auto}
+/* auto margins center the message when it is short and let it scroll from
+   the top when it is tall (the Armory made pre-fight cards much richer) */
+.stage-msg>*:first-child{margin-top:auto}
+.stage-msg>*:last-child{margin-bottom:auto}
 .stage-msg h2{font-size:clamp(1.4rem,4vw,2.2rem); margin:.2rem 0 .4rem; text-shadow:2px 0 rgba(255,42,109,.6), -2px 0 rgba(0,229,255,.6)}
 .stage-msg p{color:var(--dim); margin:0 0 1.2rem}
 .verdict{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(4,4,8,.78); padding:1rem; z-index:2}
 .verdict .vcard-inner{max-width:520px; width:100%}
-/* parry — the biggest thumb target in the room */
+/* parry — the biggest thumb target in the room, and now it reads as what
+   it is: a SHIELD. A gold-outlined shield sigil rides its left face, set
+   into a steel plate with an inset ring and real shadow weight. */
 .parrybtn{display:flex; flex-direction:column; align-items:center; gap:.1rem; width:100%; margin-top:.8rem;
-  background:#131a26; color:var(--dim); border:1px solid var(--line); border-left:4px solid var(--dim);
-  padding:.8rem 1rem; font-size:1.25rem; font-weight:900; letter-spacing:.14em; cursor:pointer;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.2 19.5 4.8v6.1c0 4.9-3.1 8.9-7.5 10.9C7.6 19.8 4.5 15.8 4.5 10.9V4.8Z' fill='rgba(252,238,10,.08)' stroke='%23fcee0a' stroke-width='1.5'/%3E%3Cpath d='M12 6v10M8 9.5h8' stroke='%23fcee0a' stroke-width='1.3'/%3E%3C/svg%3E") no-repeat left .9rem center / 40px 40px,
+    linear-gradient(180deg, #1a2231, #0c1017);
+  color:var(--dim); border:2px solid #39435a; border-left:5px solid var(--dim);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.65), inset 0 0 26px rgba(0,0,0,.55), 0 8px 22px rgba(0,0,0,.55);
+  padding:.85rem 1rem .85rem 3.4rem; font-size:1.25rem; font-weight:900; letter-spacing:.14em; cursor:pointer;
   clip-path:var(--cut); touch-action:manipulation; transition:background .1s, color .1s}
 .parrybtn span{font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:none}
 .parrybtn:disabled{opacity:.55; cursor:default}
-.parrybtn.armed{background:var(--yellow); color:#0a0a05; border-color:var(--yellow); border-left-color:#0a0a05;
+.parrybtn.armed{background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.2 19.5 4.8v6.1c0 4.9-3.1 8.9-7.5 10.9C7.6 19.8 4.5 15.8 4.5 10.9V4.8Z' fill='rgba(10,10,5,.14)' stroke='%230a0a05' stroke-width='1.6'/%3E%3Cpath d='M12 6v10M8 9.5h8' stroke='%230a0a05' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat left .9rem center / 40px 40px,
+    var(--yellow);
+  color:#0a0a05; border-color:var(--yellow); border-left-color:#0a0a05;
   animation:parrypulse .3s steps(2) infinite}
 @keyframes parrypulse{0%{transform:translate(0)}50%{transform:translate(1px,-1px) scale(1.012)}100%{transform:translate(-1px,1px)}}
 .kit{display:grid; grid-template-columns:repeat(4,1fr); gap:.7rem; margin-top:.8rem}
 @media(max-width:640px){.kit{grid-template-columns:repeat(2,1fr)}}
-.tool{position:relative; border:1px solid var(--line); border-top:3px solid var(--tc,#00e5ff); background:linear-gradient(180deg, #12161f, #0a0d14);
+.tool{position:relative; border:1px solid var(--line); border-top:3px solid var(--tc,#00e5ff);
+  background:
+    repeating-linear-gradient(115deg, rgba(255,255,255,.016) 0 2px, transparent 2px 7px),
+    radial-gradient(200px 90px at 85% -10%, rgba(255,255,255,.05), transparent 70%),
+    linear-gradient(180deg, #141926, #090c13);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05), inset 0 -14px 22px rgba(0,0,0,.45), 0 6px 16px rgba(0,0,0,.45);
   color:var(--ink); padding:.85rem .7rem .75rem; cursor:pointer; text-align:left;
-  min-height:118px; transition:transform .08s, box-shadow .12s; overflow:hidden; touch-action:manipulation; clip-path:var(--cut)}
-.tool:hover{box-shadow:0 0 20px rgba(0,229,255,.25)}
+  min-height:126px; transition:transform .08s, box-shadow .12s; overflow:hidden; touch-action:manipulation; clip-path:var(--cut)}
+.tool:hover{box-shadow:inset 0 1px 0 rgba(255,255,255,.05), inset 0 -14px 22px rgba(0,0,0,.45), 0 0 20px rgba(0,229,255,.25)}
+/* the tool's sigil — inline SVG art in the pod's own color, top-right */
+.tool .ticon{position:absolute; top:.5rem; right:.55rem; width:27px; height:27px; color:var(--tc,#00e5ff);
+  opacity:.92; pointer-events:none; filter:drop-shadow(0 0 6px var(--tc,#00e5ff))}
+.tool .ticon svg{display:block; width:100%; height:100%}
+.tool .tname{padding-right:2rem}
 .tool:active{transform:scale(.97)}
 .tool:disabled{opacity:.45; cursor:not-allowed}
 .tool.locked{border-top-color:var(--yellow)}
@@ -270,7 +331,7 @@ main{max-width:1060px; margin:0 auto; padding:1.2rem 1rem 3rem}
 .v-actions{display:flex; gap:.8rem; justify-content:center; margin-top:1.2rem; flex-wrap:wrap; align-items:center}
 
 /* auth */
-.authbox{max-width:440px; margin:2.4rem auto; background:linear-gradient(180deg, var(--panel2), var(--panel));
+.authbox{max-width:440px; margin:2.4rem auto; background:var(--panelbg);
   border:1px solid var(--line); border-top:3px solid var(--yellow); padding:1.6rem; clip-path:var(--cut)}
 .authbox.wide{max-width:760px}
 .authform{display:flex; flex-direction:column; gap:.9rem; margin-top:1rem}
@@ -346,22 +407,22 @@ button[type=submit]:not(.fightbtn){background:#1a2231; color:var(--ink); border:
 .itempanel h3{margin:.1rem 0 .5rem; font-size:.8rem; color:var(--dim)}
 .itemopt{display:block; margin:.45rem 0; font-size:.88rem; line-height:1.45; cursor:pointer}
 .itemopt select{margin-left:.4rem; background:var(--panel2); color:var(--ink); border:1px solid var(--line); padding:.25rem}
-.itemopt.legendary{border-left:3px solid #ffd700; padding-left:.6rem}
-.itemopt.epic{border-left:3px solid var(--violet); padding-left:.6rem}
+.itemopt.legendary{border-left:3px solid var(--r-legendary); padding-left:.6rem}
+.itemopt.epic{border-left:3px solid var(--r-epic); padding-left:.6rem}
 
 /* rarity tiers — LEGENDARY gold is the Wrap's alone; FOUNDER burns ember */
 .rarity{font-size:.68rem; font-weight:800; letter-spacing:.16em; padding:.08rem .4rem; border:1px solid; vertical-align:middle}
-.rarity.legendary{color:#ffd700; border-color:#ffd700; background:rgba(255,215,0,.10); text-shadow:0 0 8px rgba(255,215,0,.6)}
-.rarity.epic{color:var(--violet); border-color:var(--violet); background:rgba(185,103,255,.10)}
-.rarity.rare{color:var(--cyan); border-color:var(--cyan); background:rgba(0,229,255,.08)}
-.rarity.founder{color:#ff9a3c; border-color:#ff9a3c; background:rgba(255,122,26,.12); text-shadow:0 0 8px rgba(255,140,40,.55)}
+.rarity.legendary{color:var(--r-legendary); border-color:var(--r-legendary); background:rgba(255,215,0,.10); text-shadow:0 0 8px rgba(255,215,0,.6)}
+.rarity.epic{color:var(--r-epic); border-color:var(--r-epic); background:rgba(185,103,255,.10)}
+.rarity.rare{color:var(--r-rare); border-color:var(--r-rare); background:rgba(0,229,255,.08)}
+.rarity.founder{color:var(--r-founder); border-color:var(--r-founder); background:rgba(255,122,26,.12); text-shadow:0 0 8px rgba(255,140,40,.55)}
 
 /* ---- Phase 3: the Pit ---------------------------------------------------- */
 .pitwrap{max-width:1060px; margin:0 auto; padding:1rem}
 .lede.small{font-size:.95rem; line-height:1.55}
 .sortlinks{font-size:.88rem; color:var(--dim)}
 .pitgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:.9rem; margin-top:1rem}
-.pitcard{border:1px solid var(--line); background:linear-gradient(180deg, var(--panel2), var(--panel)); padding:.9rem 1rem; clip-path:var(--cut)}
+.pitcard{border:1px solid var(--line); background:var(--panelbg); padding:.9rem 1rem; clip-path:var(--cut)}
 .pitcard.is-mirage{border-color:rgba(185,103,255,.55)}
 .pitcard.is-armor{border-color:rgba(255,107,157,.6); box-shadow:0 0 18px rgba(255,42,109,.15)}
 .pit-head{display:flex; gap:.7rem; align-items:flex-start}
@@ -390,9 +451,9 @@ button[type=submit]:not(.fightbtn){background:#1a2231; color:var(--ink); border:
 .xpbar i{display:block; height:100%; background:linear-gradient(90deg, var(--cyan), var(--violet))}
 ul.items{list-style:none; padding:0; margin:.4rem 0}
 .itemline{padding:.45rem .6rem; margin:.35rem 0; border:1px solid var(--line); border-left:3px solid var(--cyan); background:rgba(16,20,31,.7); font-size:.9rem}
-.itemline.legendary{border-left-color:#ffd700; background:linear-gradient(90deg, rgba(255,215,0,.12), rgba(16,20,31,.7) 65%); box-shadow:0 0 14px rgba(255,215,0,.18)}
-.itemline.epic{border-left-color:var(--violet)}
-.itemline.founder{border-left-color:#ff9a3c; background:linear-gradient(90deg, rgba(255,122,26,.13), rgba(16,20,31,.7) 65%)}
+.itemline.legendary{border-left-color:var(--r-legendary); background:linear-gradient(90deg, rgba(255,215,0,.12), rgba(16,20,31,.7) 65%); box-shadow:0 0 14px rgba(255,215,0,.18)}
+.itemline.epic{border-left-color:var(--r-epic)}
+.itemline.founder{border-left-color:var(--r-founder); background:linear-gradient(90deg, rgba(255,122,26,.13), rgba(16,20,31,.7) 65%)}
 ul.items.spent .itemline{opacity:.62}
 .boardh{font-size:.85rem; color:var(--dim); margin:1rem 0 .3rem}
 .founders-line{margin-top:.8rem}
@@ -421,7 +482,11 @@ ul.items.spent .itemline{opacity:.62}
 .descent-record strong{display:block; font-size:1.5rem; color:#ffd166; font-variant-numeric:tabular-nums}
 .descent-record span{color:var(--dim); font-size:.78rem; letter-spacing:.12em; text-transform:uppercase}
 .runline{text-align:center; color:#d8a441; letter-spacing:.08em; margin:.5rem 0; font-variant-numeric:tabular-nums}
-.descent-stage{background:#070405; border-color:#3a2418}
+.descent-stage{background:
+  repeating-linear-gradient(115deg, rgba(255,255,255,.014) 0 2px, transparent 2px 7px),
+  radial-gradient(700px 420px at 50% 40%, #170b06 0%, rgba(8,4,2,0) 70%),
+  radial-gradient(560px 240px at 50% 112%, rgba(255,90,40,.13), transparent 70%), #070405;
+  border-color:#3a2418}
 .lootlayer{position:absolute; inset:0; pointer-events:none; overflow:hidden}
 .stage{position:relative}
 .beam{position:absolute; top:0; bottom:0; width:70px; margin-left:-35px; text-align:center; animation:beamrise .5s ease-out}
@@ -434,12 +499,12 @@ ul.items.spent .itemline{opacity:.62}
 .beam.fade{opacity:0; transition:opacity .7s}
 @keyframes beamrise{from{transform:scaleY(.2); opacity:0} to{transform:scaleY(1); opacity:1}}
 .beam.t-sturdy{color:#cfd6dd}
-.beam.t-rare{color:#3fa9ff}
-.beam.t-epic{color:#b967ff}
-.beam.t-legendary{color:#ffd700; width:120px; margin-left:-60px}
+.beam.t-rare{color:var(--r-rare)}
+.beam.t-epic{color:var(--r-epic)}
+.beam.t-legendary{color:var(--r-legendary); width:120px; margin-left:-60px}
 .beam.t-legendary i{width:22px; margin-left:-11px; box-shadow:0 0 60px #ffd700}
 .beam.t-legendary span{font-size:.95rem; bottom:22%}
-.beam.t-godforged{color:#fff3c4; width:170px; margin-left:-85px}
+.beam.t-godforged{color:var(--r-godforged); width:170px; margin-left:-85px}
 .beam.t-godforged i{width:34px; margin-left:-17px; background:linear-gradient(180deg, transparent, #fff 25%, #ffd700 60%, transparent); box-shadow:0 0 90px #ffd700, 0 0 30px #fff}
 .beam.t-godforged span{font-size:1.05rem; bottom:26%; color:#ffe9a8}
 .bossplate{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
@@ -466,16 +531,16 @@ ul.items.spent .itemline{opacity:.62}
 .haulfeed{margin-top:1rem}
 ul#haulfeed{list-style:none; padding:0; margin:.4rem 0}
 .gearline{padding:.45rem .6rem; margin:.35rem 0; border:1px solid var(--line); border-left:3px solid #8b98a9; background:rgba(16,20,31,.7); font-size:.9rem; list-style:none}
-.gearline.t-rare{border-left-color:#3fa9ff}
-.gearline.t-epic{border-left-color:#b967ff}
-.gearline.t-legendary{border-left-color:#ffd700; background:linear-gradient(90deg, rgba(255,215,0,.12), rgba(16,20,31,.7) 65%); box-shadow:0 0 14px rgba(255,215,0,.18)}
-.gearline.t-godforged{border-left-color:#fff3c4; background:linear-gradient(90deg, rgba(255,215,0,.22), rgba(16,20,31,.7) 70%); box-shadow:0 0 22px rgba(255,215,0,.35)}
+.gearline.t-rare{border-left-color:var(--r-rare)}
+.gearline.t-epic{border-left-color:var(--r-epic)}
+.gearline.t-legendary{border-left-color:var(--r-legendary); background:linear-gradient(90deg, rgba(255,215,0,.12), rgba(16,20,31,.7) 65%); box-shadow:0 0 14px rgba(255,215,0,.18)}
+.gearline.t-godforged{border-left-color:var(--r-godforged); background:linear-gradient(90deg, rgba(255,215,0,.22), rgba(16,20,31,.7) 70%); box-shadow:0 0 22px rgba(255,215,0,.35)}
 .tierbadge{display:inline-block; padding:.08rem .45rem; border:1px solid #8b98a9; color:#cfd6dd; font-size:.75rem; font-weight:700; letter-spacing:.06em; margin:.1rem .15rem .1rem 0}
 .tierbadge.t-sturdy{border-color:#8b98a9; color:#cfd6dd}
-.tierbadge.t-rare{border-color:#3fa9ff; color:#8ec9ff}
-.tierbadge.t-epic{border-color:#b967ff; color:#d9b8ff}
-.tierbadge.t-legendary{border-color:#ffd700; color:#ffe970; background:rgba(255,215,0,.12)}
-.tierbadge.t-godforged{border-color:#fff3c4; color:#fff3c4; background:linear-gradient(90deg, rgba(255,215,0,.3), rgba(255,255,255,.12)); box-shadow:0 0 12px rgba(255,215,0,.45)}
+.tierbadge.t-rare{border-color:var(--r-rare); color:#8ec9ff}
+.tierbadge.t-epic{border-color:var(--r-epic); color:#d9b8ff}
+.tierbadge.t-legendary{border-color:var(--r-legendary); color:#ffe970; background:rgba(255,215,0,.12)}
+.tierbadge.t-godforged{border-color:var(--r-godforged); color:var(--r-godforged); background:linear-gradient(90deg, rgba(255,215,0,.3), rgba(255,255,255,.12)); box-shadow:0 0 12px rgba(255,215,0,.45)}
 .gear-row{display:flex; align-items:center; gap:.6rem; padding:.35rem 0; flex-wrap:wrap}
 .gear-slot{font-weight:700; min-width:92px; color:#d8a441}
 .inlineform{display:inline}
@@ -483,7 +548,7 @@ ul#haulfeed{list-style:none; padding:0; margin:.4rem 0}
 .tool.twinned{box-shadow:0 0 0 1px #ffd700, 0 0 18px rgba(255,215,0,.35)}
 .tool.seized{opacity:.45; filter:grayscale(.7)}
 .tool .tgear{display:block; font-size:.72rem; color:#ffd166; letter-spacing:.03em}
-.itemopt.godopt{border-left-color:#fff3c4; background:linear-gradient(90deg, rgba(255,215,0,.14), transparent 70%)}
+.itemopt.godopt{border-left-color:var(--r-godforged); background:linear-gradient(90deg, rgba(255,215,0,.14), transparent 70%)}
 .pit-gear{margin:.3rem 0}
 .v-descent{border:1px solid #3a2418; background:rgba(20,8,4,.5); padding:.6rem .8rem; margin:.6rem 0}
 .descent-boards{margin-top:1.2rem}
@@ -492,4 +557,110 @@ ul#haulfeed{list-style:none; padding:0; margin:.4rem 0}
   .bossplate h2{font-size:1.6rem}
   .beam span{width:120px; font-size:.7rem}
   .gatechoice-btns .fightbtn{padding:.8rem 1.2rem; font-size:.95rem}
+}
+
+/* ---- THE BEAUTY PASS: embers + the Armory --------------------------------
+   Ambient sparks for the whole house, and the pre-fight ceremony that
+   loads a fighter's build the way a character screen should. */
+
+/* drifting embers — 14 CSS sparks, capped, slow, pointer-blind. Warm in
+   both registers: ash over the neon yard, embers in the deep. */
+.embers{position:fixed; inset:0; overflow:hidden; pointer-events:none; z-index:1}
+.embers i{position:absolute; bottom:-12px; width:3px; height:3px; border-radius:50%;
+  background:var(--ember); opacity:0; box-shadow:0 0 7px 1px rgba(255,122,26,.55);
+  animation:emberdrift linear infinite}
+.embers i:nth-child(3n){background:var(--oldgold); box-shadow:0 0 7px 1px rgba(216,164,65,.5)}
+.embers i:nth-child(4n){width:2px; height:2px}
+.embers i:nth-child(1){left:6%; animation-duration:26s; animation-delay:-4s}
+.embers i:nth-child(2){left:14%; animation-duration:34s; animation-delay:-19s}
+.embers i:nth-child(3){left:23%; animation-duration:29s; animation-delay:-11s}
+.embers i:nth-child(4){left:31%; animation-duration:38s; animation-delay:-26s}
+.embers i:nth-child(5){left:40%; animation-duration:24s; animation-delay:-8s}
+.embers i:nth-child(6){left:48%; animation-duration:33s; animation-delay:-16s}
+.embers i:nth-child(7){left:56%; animation-duration:27s; animation-delay:-2s}
+.embers i:nth-child(8){left:63%; animation-duration:36s; animation-delay:-22s}
+.embers i:nth-child(9){left:71%; animation-duration:25s; animation-delay:-13s}
+.embers i:nth-child(10){left:78%; animation-duration:31s; animation-delay:-6s}
+.embers i:nth-child(11){left:85%; animation-duration:28s; animation-delay:-18s}
+.embers i:nth-child(12){left:91%; animation-duration:35s; animation-delay:-9s}
+.embers i:nth-child(13){left:36%; animation-duration:30s; animation-delay:-24s}
+.embers i:nth-child(14){left:67%; animation-duration:32s; animation-delay:-28s}
+@keyframes emberdrift{
+  0%{transform:translate3d(0,0,0); opacity:0}
+  7%{opacity:.75}
+  55%{transform:translate3d(16px,-54vh,0)}
+  88%{opacity:.5}
+  100%{transform:translate3d(-10px,-104vh,0); opacity:0}
+}
+
+/* THE ARMORY — the build, on its stands. Inside the pre-fight stage card on
+   the Fight and Descent doors. Grand on first load (stands light in one by
+   one); site.js folds it to a one-line summary on later loads of a session. */
+.armory{margin:1rem auto 0; max-width:640px; text-align:left; border:1px solid #3a2c18;
+  background:
+    repeating-linear-gradient(115deg, rgba(255,255,255,.014) 0 2px, transparent 2px 7px),
+    radial-gradient(420px 150px at 50% -12%, rgba(255,122,26,.12), transparent 70%),
+    linear-gradient(180deg, #141019, #0a0810);
+  padding:.8rem .95rem; box-shadow:0 14px 34px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,233,168,.08)}
+.armory-head{display:flex; justify-content:space-between; align-items:center; gap:.8rem; flex-wrap:wrap}
+.armory-title{font-family:var(--font-display); font-weight:700; letter-spacing:.14em; font-size:.92rem;
+  color:var(--parchment); text-shadow:0 0 14px rgba(255,122,26,.45)}
+.armory-toggle{font-size:.72rem; padding:.3rem .6rem}
+.armory-sub{margin:.85rem 0 .4rem; font-size:.72rem; letter-spacing:.18em; color:var(--dim); text-transform:uppercase}
+.armory-stands{display:grid; grid-template-columns:repeat(auto-fit, minmax(112px, 1fr)); gap:.55rem; margin-top:.7rem}
+.stand{position:relative; border:1px solid var(--line); border-top:3px solid #4a5468; background:rgba(7,9,14,.72);
+  padding:.6rem .55rem .55rem; display:flex; flex-direction:column; gap:.22rem; min-height:118px;
+  animation:standin .55s ease-out backwards}
+.stand:nth-child(2){animation-delay:.08s}
+.stand:nth-child(3){animation-delay:.16s}
+.stand:nth-child(4){animation-delay:.24s}
+.stand:nth-child(5){animation-delay:.32s}
+@keyframes standin{from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:none}}
+.stand-icon{width:24px; height:24px; color:var(--dim)}
+.stand-icon svg{display:block; width:100%; height:100%}
+.stand-slot{font-size:.64rem; letter-spacing:.16em; text-transform:uppercase; color:var(--dim)}
+.stand-name{font-family:var(--font-display); font-size:.92rem; letter-spacing:.03em; line-height:1.15}
+.stand-affixes{font-size:.7rem; color:var(--dim); line-height:1.45}
+.stand .tierbadge{align-self:flex-start}
+.stand.r-sturdy{border-top-color:var(--r-sturdy)}
+.stand.r-sturdy .stand-icon{color:var(--r-sturdy)}
+.stand.r-rare{border-top-color:var(--r-rare)}
+.stand.r-rare .stand-icon{color:var(--r-rare)}
+.stand.r-epic{border-top-color:var(--r-epic)}
+.stand.r-epic .stand-icon{color:var(--r-epic)}
+.stand.r-legendary{border-top-color:var(--r-legendary); border-color:rgba(255,215,0,.45);
+  background:linear-gradient(180deg, rgba(255,215,0,.09), rgba(7,9,14,.72) 68%);
+  box-shadow:0 0 18px rgba(255,215,0,.20)}
+.stand.r-legendary .stand-icon{color:var(--r-legendary); filter:drop-shadow(0 0 6px rgba(255,215,0,.7))}
+.stand.r-godforged{border-top-color:var(--r-godforged); border-color:rgba(255,243,196,.55);
+  background:linear-gradient(180deg, rgba(255,215,0,.16), rgba(7,9,14,.72) 68%);
+  box-shadow:0 0 24px rgba(255,215,0,.35)}
+.stand.r-godforged .stand-icon{color:var(--r-godforged); filter:drop-shadow(0 0 7px rgba(255,215,0,.85))}
+.stand.r-founder{border-top-color:var(--r-founder)}
+.stand.r-founder .stand-icon{color:var(--r-founder)}
+.stand.bare{opacity:.62; border-top-color:#39424f}
+.armory-shelf{list-style:none; margin:0; padding:0}
+.shelfline{padding:.32rem .5rem; margin:.3rem 0; border:1px solid var(--line); border-left:3px solid var(--cyan);
+  background:rgba(16,20,31,.66); font-size:.85rem; animation:standin .55s ease-out backwards; animation-delay:.38s}
+.shelfline.legendary{border-left-color:var(--r-legendary)}
+.shelfline.epic{border-left-color:var(--r-epic)}
+.shelfline.rare{border-left-color:var(--r-rare)}
+.shelfline.founder{border-left-color:var(--r-founder)}
+.shelfline.godforged{border-left-color:var(--r-godforged);
+  background:linear-gradient(90deg, rgba(255,215,0,.14), rgba(16,20,31,.66) 70%)}
+.armory-abilities{display:flex; flex-wrap:wrap; gap:.45rem; animation:standin .55s ease-out backwards; animation-delay:.46s}
+.ability-chip{display:inline-flex; align-items:center; gap:.45rem; border:1px solid var(--line);
+  background:rgba(16,20,31,.66); padding:.32rem .6rem; font-size:.82rem; font-weight:700; letter-spacing:.05em}
+.ability-chip i{width:9px; height:9px; border-radius:50%; box-shadow:0 0 9px currentColor; flex:0 0 auto}
+.armory-line{display:none; margin:.6rem 0 0; color:var(--dim); font-size:.86rem}
+.armory.folded .armory-body{display:none}
+.armory.folded .armory-line{display:block}
+@media(max-width:640px){.armory-stands{grid-template-columns:repeat(auto-fit, minmax(96px, 1fr))} .stand{min-height:104px}}
+
+/* reduced motion: the house goes still for anyone who asks it to */
+@media (prefers-reduced-motion: reduce){
+  .embers{display:none}
+  .stand, .shelfline, .armory-abilities{animation:none}
+  .glitch, .hero-gate .ring, .hero-gate .eye, .parrybtn.armed, .beam,
+  .stormbanner, .live-dot{animation:none !important}
 }

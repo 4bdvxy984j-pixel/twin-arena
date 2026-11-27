@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Evolution Web — THE TWIN ARENA</title>
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/sfx.js"></script>
+</head><body>
+<div class="embers" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brandmark">◐</span> THE TWIN ARENA</a>
+  <button id="navtoggle" class="navtoggle" type="button" aria-expanded="false" aria-controls="topnav" aria-label="Open the menu">☰</button>
+  <nav id="topnav"><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/descent">The Descent</a><a href="/web">Evolution</a><a href="/profile">Delver</a> <a href="/auth/logout">Sign out</a><button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
+</header>
+<main>
+  <section class="webwrap">
+    <h1>The Evolution Web</h1>
+    <p class="lede small">You hold <strong id="pts">140</strong> mutation points. Every evolution changes real numbers in your next fight — sharper tools, slower learning, longer rounds. The Twin evolves too, against everyone.</p>
+    <p class="err hidden" id="weberr"></p>
+    <div class="web"><div class="branch"><h2>Vectors</h2><div class="node owned ">
+        
+        <div class="node-dot">●</div>
+        <h3>Sharper Probes</h3><p>Probe damage +35%.</p>
+        <p class="node-cost">Evolved</p>
+        
+      </div><div class="node owned ">
+        <div class="link-line"></div>
+        <div class="node-dot">●</div>
+        <h3>Heavy Flood</h3><p>Flood damage +30%.</p>
+        <p class="node-cost">Evolved</p>
+        
+      </div><div class="node  canbuy">
+        <div class="link-line"></div>
+        <div class="node-dot">○</div>
+        <h3>Deep Kit</h3><p>All tool damage +12%.</p>
+        <p class="node-cost">110 pts</p>
+        <button class="evolvebtn" data-node="vec3" >Evolve</button>
+      </div></div><div class="branch"><h2>Deception</h2><div class="node owned ">
+        
+        <div class="node-dot">●</div>
+        <h3>False Echoes</h3><p>The Twin learns 30% less from your fights.</p>
+        <p class="node-cost">Evolved</p>
+        
+      </div><div class="node owned ">
+        <div class="link-line"></div>
+        <div class="node-dot">●</div>
+        <h3>Ghost Hands</h3><p>Your own familiarity counts 25% less against you.</p>
+        <p class="node-cost">Evolved</p>
+        
+      </div><div class="node  canbuy">
+        <div class="link-line"></div>
+        <div class="node-dot">○</div>
+        <h3>Phantom Choir</h3><p>Decoy’s next-strike bonus rises to +90%.</p>
+        <p class="node-cost">110 pts</p>
+        <button class="evolvebtn" data-node="dec3" >Evolve</button>
+      </div></div><div class="branch"><h2>Patience</h2><div class="node  canbuy">
+        
+        <div class="node-dot">○</div>
+        <h3>Slow Burn</h3><p>Whisper damage and burn +30%.</p>
+        <p class="node-cost">30 pts</p>
+        <button class="evolvebtn" data-node="pat1" >Evolve</button>
+      </div><div class="node  ">
+        <div class="link-line"></div>
+        <div class="node-dot">○</div>
+        <h3>Smolder</h3><p>The gate heals 20% slower against you, always.</p>
+        <p class="node-cost">60 pts · evolve the node above first</p>
+        
+      </div><div class="node  ">
+        <div class="link-line"></div>
+        <div class="node-dot">○</div>
+        <h3>Long Game</h3><p>Your rounds last +25 seconds.</p>
+        <p class="node-cost">110 pts · evolve the node above first</p>
+        
+      </div></div><div class="branch"><h2>Speed</h2><div class="node owned ">
+        
+        <div class="node-dot">●</div>
+        <h3>Quick Fingers</h3><p>All cooldowns 15% shorter.</p>
+        <p class="node-cost">Evolved</p>
+        
+      </div><div class="node owned ">
+        <div class="link-line"></div>
+        <div class="node-dot">●</div>
+        <h3>Surge</h3><p>Energy returns 30% faster.</p>
+        <p class="node-cost">Evolved</p>
+        
+      </div><div class="node  canbuy">
+        <div class="link-line"></div>
+        <div class="node-dot">○</div>
+        <h3>Overclock</h3><p>Cooldowns 15% shorter again, and +20 max energy.</p>
+        <p class="node-cost">110 pts</p>
+        <button class="evolvebtn" data-node="spd3" >Evolve</button>
+      </div></div></div>
+  </section></main>
+<footer class="foot">
+  <p>A game about Gatekeeper's Twin — the sparring partner that learns. Every fight here teaches it a shape;
+  every shape makes the next fighter's road harder. Play is asynchronous: you fight the Twin other fighters educated,
+  and other fighters will meet the one you educate. No live player-versus-player — the opponent is the Twin, and it is enough.</p>
+</footer>
+<script src="/js/site.js"></script>
+</body></html>
