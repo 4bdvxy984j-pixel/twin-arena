@@ -17,6 +17,7 @@ function shell(title, body, me) {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- twin-arena build: 2026.11.27-persistence -->
 <title>${esc(title)} — THE TWIN ARENA</title>
 <link rel="stylesheet" href="/css/style.css">
 <script src="/js/sfx.js"></script>
