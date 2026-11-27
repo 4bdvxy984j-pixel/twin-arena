@@ -13,8 +13,17 @@ function defaultState() {
     config: {
       aggression: 1.0,      // deck dial: gate regen / pressure multiplier (0.5 - 2)
       learningSpeed: 1.0,   // deck dial: how fast familiarity grows (0.5 - 2)
-      frozen: false         // deck switch: closes the arena with a maintenance card
+      frozen: false,        // deck switch: closes the arena with a maintenance card
+      stormUntil: 0,        // SUPER DECK: storm deadline (epoch ms); 0 = no storm
+      broadcast: null,      // SUPER DECK: { text, expiresAt } — THE TWIN SPEAKS; expiresAt 0 = until cleared
+      floodgates: false,    // SUPER DECK: chaos toggle — trace gains halved while on
+      spotlight: null       // SUPER DECK: challenge token pinned as Tonight's Devil
     },
+    deck: {
+      memberTieHash: null,  // scrypt hash ONLY of the owner's Gatekeeper Member Key — the key itself is never stored
+      ownerPlayerId: null   // the fighter profile the tie binds (the house owner)
+    },
+    deckSessions: {},       // deck session token -> 'admin' | 'member' (member-key sign-in rides a cookie, never the URL)
     players: {},            // id -> player record (guests have no email)
     sessions: {},           // session token -> player id
     shapesGlobal: {},       // patternKey -> times taught (all fighters, ever)
@@ -35,6 +44,7 @@ function load() {
       const d = defaultState();
       state = Object.assign(d, raw);
       state.config = Object.assign(d.config, raw.config || {});
+      state.deck = Object.assign(d.deck, raw.deck || {});
     } catch (e) {
       console.error('state.json unreadable, starting fresh:', e.message);
       state = defaultState();

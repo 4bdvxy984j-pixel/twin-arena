@@ -103,6 +103,24 @@ function checkPass(password, stored) {
   return crypto.timingSafeEqual(calc, Buffer.from(hash, 'hex'));
 }
 
+// ---------- deck auth (Super Deck) ----------
+// Three ways in, in order: the ADMIN_KEY (break-glass, always works), the
+// owner's Gatekeeper Member Key — checked against the scrypt hash stored by
+// the one-time tie, never against a stored value — and a deck session cookie
+// minted at member-key sign-in so the key itself is never echoed into a page.
+function deckAuth(req, formKey) {
+  if (formKey && formKey === ADMIN_KEY) return 'admin';
+  if (formKey && state.deck && state.deck.memberTieHash && checkPass(formKey, state.deck.memberTieHash)) return 'member';
+  const c = cookies(req);
+  if (c.ta_deck && state.deckSessions && state.deckSessions[c.ta_deck]) return state.deckSessions[c.ta_deck];
+  return null;
+}
+function deckBack(res, formKey, extra) {
+  const q = extra || '';
+  if (formKey && formKey === ADMIN_KEY) return redirect(res, '/deck?key=' + encodeURIComponent(ADMIN_KEY) + (q ? '&' + q : ''));
+  return redirect(res, '/deck' + (q ? '?' + q : ''));
+}
+
 // ---------- multipart (photo upload) ----------
 function parseMultipart(buf, contentType) {
   const m = /boundary=(.+)$/.exec(contentType || '');
@@ -198,9 +216,29 @@ async function route(req, res) {
     return sendHtml(res, views.verdictPage(state, v, me));
   }
   if (method === 'GET' && p === '/deck') {
-    const key = url.searchParams.get('key') || '';
-    if (key !== ADMIN_KEY) return sendHtml(res, views.shell('Deck', '<section class="authbox"><h1>Arena Deck</h1><form class="authform" method="get" action="/deck"><label>Deck key<input name="key" type="password"></label><button class="fightbtn" type="submit">Enter</button></form></section>', null), 403);
-    return sendHtml(res, views.deckPage(state, key, url.searchParams.get('saved') === '1'));
+    const keyParam = url.searchParams.get('key');
+    let auth = null, viaKey = '';
+    if (keyParam) {
+      if (keyParam === ADMIN_KEY) { auth = 'admin'; viaKey = ADMIN_KEY; }
+      else if (state.deck.memberTieHash && checkPass(keyParam, state.deck.memberTieHash)) {
+        // Member-key sign-in: mint a deck session so the key is never
+        // echoed back into the deck's own pages or forms.
+        const tok = rid(24);
+        state.deckSessions[tok] = 'member';
+        setCookie(res, 'ta_deck', tok, 30);
+        store.save(true);
+        return redirect(res, '/deck');
+      }
+    } else {
+      auth = deckAuth(req, null);
+    }
+    if (!auth) return sendHtml(res, views.shell('Deck', '<section class="authbox"><h1>Arena Deck</h1><form class="authform" method="get" action="/deck"><label>Deck key — or your Gatekeeper Member Key<input name="key" type="password"></label><button class="fightbtn" type="submit">Enter</button></form></section>', null), 403);
+    return sendHtml(res, views.deckPage(state, {
+      key: viaKey, admin: auth === 'admin',
+      saved: url.searchParams.get('saved') === '1',
+      error: url.searchParams.get('error') || null,
+      notice: url.searchParams.get('notice') || null
+    }));
   }
 
   // ---- auth
@@ -244,7 +282,19 @@ async function route(req, res) {
       .filter(x => x.email && x.publicProfile !== false && x.record.bouts > 0)
       .sort((a, b) => (b.record.breaches - a.record.breaches) || (b.points - a.points)).slice(0, 8)
       .map(x => ({ id: x.id, name: x.displayName, photo: x.photo, breaches: x.record.breaches, points: x.points }));
-    return sendJson(res, { meter: game.educationMeter(state), fights: state.fights.slice(0, 10), leaders, frozen: state.config.frozen });
+    const storm = game.stormActive(state);
+    const bc = state.config.broadcast;
+    const broadcast = bc && bc.text && (!bc.expiresAt || Date.now() < bc.expiresAt) ? bc.text : null;
+    let spotlight = null;
+    if (state.config.spotlight) {
+      const owner = Object.values(state.players).find(x => x.challengeToken === state.config.spotlight);
+      if (owner) spotlight = { token: owner.challengeToken, name: owner.displayName || 'A fighter', photo: owner.photo, breaches: owner.record.breaches, bouts: owner.record.bouts };
+    }
+    return sendJson(res, {
+      meter: game.educationMeter(state), fights: state.fights.slice(0, 10), leaders, frozen: state.config.frozen,
+      storm: { active: storm, until: storm ? state.config.stormUntil : 0, secsLeft: storm ? Math.max(0, Math.round((state.config.stormUntil - Date.now()) / 1000)) : 0 },
+      broadcast, floodgates: !!state.config.floodgates, spotlight
+    });
   }
   if (method === 'GET' && p === '/api/me') {
     return sendJson(res, {
@@ -313,14 +363,23 @@ async function route(req, res) {
     const armorMap = mode === 'challenge' ? (owner.twinArmor || {}) : (me.twinArmor || {});
     const stats = game.effectiveStats(state, me, armorMap);
     const seed = crypto.randomInt(1, 2147483647);
-    const strikes = game.makeStrikes(seed, stats.roundMs, state.config.aggression);
+    // The weather is snapshotted at the door: storm aggression deals the
+    // strike schedule, the points multiplier rides the fight into the
+    // referee, and floodgates are already baked into the stats' trace costs.
+    const storm = game.stormActive(state);
+    const strikes = game.makeStrikes(seed, stats.roundMs, game.effectiveAggression(state));
     const fight = {
       id: rid(10), playerId: me.id, mode,
       challengeOwnerId: owner ? owner.id : null,
-      stats, seed, strikes, startedAt: Date.now()
+      stats, seed, strikes, startedAt: Date.now(),
+      storm, pointsMult: storm ? game.STORM.pointsMult : 1,
+      floodgates: !!state.config.floodgates
     };
     activeFights.set(fight.id, fight);
-    return sendJson(res, { fightId: fight.id, stats, strikes, mode, ownerName: owner ? (owner.displayName || 'A fighter') : null });
+    return sendJson(res, {
+      fightId: fight.id, stats, strikes, mode, ownerName: owner ? (owner.displayName || 'A fighter') : null,
+      storm, floodgates: fight.floodgates
+    });
   }
   if (method === 'POST' && p === '/api/fight/finish') {
     const f = await bodyJson(req);
@@ -379,13 +438,107 @@ async function route(req, res) {
   // ---- deck
   if (method === 'POST' && p === '/api/deck/config') {
     const f = await bodyForm(req);
-    if (String(f.key || '') !== ADMIN_KEY) return sendHtml(res, views.shell('Deck', '<section class="authbox"><h1>Wrong key.</h1></section>', null), 403);
+    if (!deckAuth(req, String(f.key || ''))) return sendHtml(res, views.shell('Deck', '<section class="authbox"><h1>Wrong key.</h1></section>', null), 403);
     const clamp = (v, d) => { const n = parseFloat(v); return isNaN(n) ? d : Math.min(2, Math.max(0.5, n)); };
     state.config.aggression = clamp(f.aggression, state.config.aggression);
     state.config.learningSpeed = clamp(f.learningSpeed, state.config.learningSpeed);
     state.config.frozen = f.frozen === 'on';
     store.save(true);
-    return redirect(res, '/deck?key=' + encodeURIComponent(ADMIN_KEY) + '&saved=1');
+    return deckBack(res, String(f.key || ''), 'saved=1');
+  }
+
+  // SUPER DECK — STORM: fire or cancel the timed event. Points ×2 and the
+  // aggression floor are applied by the referee from the fight snapshot.
+  if (method === 'POST' && p === '/api/deck/storm') {
+    const f = await bodyForm(req);
+    if (!deckAuth(req, String(f.key || ''))) return sendHtml(res, views.shell('Deck', '<section class="authbox"><h1>Wrong key.</h1></section>', null), 403);
+    if (f.cancel === '1') {
+      state.config.stormUntil = 0;
+    } else {
+      const mins = parseFloat(f.minutes);
+      const m = isNaN(mins) ? 30 : Math.min(240, Math.max(1, mins));
+      state.config.stormUntil = Date.now() + Math.round(m * 60000);
+    }
+    store.save(true);
+    return deckBack(res, String(f.key || ''), 'saved=1');
+  }
+
+  // SUPER DECK — THE TWIN SPEAKS: a broadcast line with an expiry
+  // (minutes; blank/0 = until cleared). Plain text, capped, escaped at render.
+  if (method === 'POST' && p === '/api/deck/broadcast') {
+    const f = await bodyForm(req);
+    if (!deckAuth(req, String(f.key || ''))) return sendHtml(res, views.shell('Deck', '<section class="authbox"><h1>Wrong key.</h1></section>', null), 403);
+    const text = String(f.text || '').trim().slice(0, 140);
+    if (f.clear === '1' || !text) {
+      state.config.broadcast = null;
+    } else {
+      const mins = parseFloat(f.minutes);
+      const expiresAt = (!mins || isNaN(mins) || mins <= 0) ? 0 : Date.now() + Math.round(Math.min(1440, mins) * 60000);
+      state.config.broadcast = { text, expiresAt };
+    }
+    store.save(true);
+    return deckBack(res, String(f.key || ''), 'saved=1');
+  }
+
+  // SUPER DECK — OPEN THE FLOODGATES: trace gains halve while on. The
+  // halving is dealt into each new fight's stats (see game.effectiveStats).
+  if (method === 'POST' && p === '/api/deck/floodgates') {
+    const f = await bodyForm(req);
+    if (!deckAuth(req, String(f.key || ''))) return sendHtml(res, views.shell('Deck', '<section class="authbox"><h1>Wrong key.</h1></section>', null), 403);
+    state.config.floodgates = f.state === 'on';
+    store.save(true);
+    return deckBack(res, String(f.key || ''), 'saved=1');
+  }
+
+  // SUPER DECK — SPOTLIGHT: pin a real fighter's challenge as Tonight's
+  // Devil, by fighter id or by challenge token. Anything else is refused.
+  if (method === 'POST' && p === '/api/deck/spotlight') {
+    const f = await bodyForm(req);
+    if (!deckAuth(req, String(f.key || ''))) return sendHtml(res, views.shell('Deck', '<section class="authbox"><h1>Wrong key.</h1></section>', null), 403);
+    if (f.clear === '1') {
+      state.config.spotlight = null;
+      store.save(true);
+      return deckBack(res, String(f.key || ''), 'saved=1');
+    }
+    const pin = String(f.pin || '').trim();
+    const owner = Object.values(state.players).find(x => x.id === pin || x.challengeToken === pin);
+    if (!owner) return deckBack(res, String(f.key || ''), 'error=spotlight');
+    state.config.spotlight = owner.challengeToken;
+    store.save(true);
+    return deckBack(res, String(f.key || ''), 'saved=1');
+  }
+
+  // SUPER DECK — MEMBER-KEY TIE (one-time, ADMIN_KEY only): the owner pastes
+  // his Gatekeeper Member Key once; only its scrypt hash is kept. The tie
+  // also binds his fighter: the house owner's profile, under his member
+  // identity — created here if it does not exist, claimed if it does.
+  if (method === 'POST' && p === '/api/deck/tie') {
+    const f = await bodyForm(req);
+    if (String(f.key || '') !== ADMIN_KEY) return sendHtml(res, views.shell('Deck', '<section class="authbox"><h1>Wrong key.</h1></section>', null), 403);
+    if (state.deck.memberTieHash) return deckBack(res, ADMIN_KEY, 'error=tieexists');
+    const memberKey = String(f.memberKey || '');
+    if (memberKey.length < 8) return deckBack(res, ADMIN_KEY, 'error=tiekey');
+    state.deck.memberTieHash = hashPass(memberKey);
+    let owner = Object.values(state.players).find(x => x.email === 'stevenh18818@gmail.com');
+    if (!owner) { owner = newPlayer('Steven Hall'); owner.email = 'stevenh18818@gmail.com'; }
+    owner.displayName = 'Steven Hall';
+    owner.isOwner = true;
+    state.deck.ownerPlayerId = owner.id;
+    store.save(true);
+    return deckBack(res, ADMIN_KEY, 'notice=tied');
+  }
+
+  // SUPER DECK — REMOVE TIE (ADMIN_KEY only): clears the hash and every
+  // member deck session. The owner fighter itself stays — it is his profile.
+  if (method === 'POST' && p === '/api/deck/untie') {
+    const f = await bodyForm(req);
+    if (String(f.adminKey || '') !== ADMIN_KEY) return deckBack(res, String(f.key || ''), 'error=untie');
+    state.deck.memberTieHash = null;
+    for (const tok of Object.keys(state.deckSessions)) {
+      if (state.deckSessions[tok] === 'member') delete state.deckSessions[tok];
+    }
+    store.save(true);
+    return deckBack(res, ADMIN_KEY, 'notice=untied');
   }
 
   return sendHtml(res, views.shell('Not found', '<section class="authbox"><h1>Nothing stands here.</h1><p><a href="/">Back to the arena door</a></p></section>', me), 404);

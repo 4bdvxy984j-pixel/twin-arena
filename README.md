@@ -115,20 +115,78 @@ biggest button in the room when a haymaker winds up.
 - **Challenge links** — `/challenge/<token>`: anyone opening one fights the
   owner's counter-evolved Twin instance (the owner's hardening applies). The
   result is delivered to the owner's grudge feed and the rail.
-- **Deck** — `/deck?key=<ADMIN_KEY>`: fights/shapes readouts plus two working
-  dials (aggression — which now also sets how often the Twin strikes — and
-  learning speed) and a freeze switch that closes the arena behind a
-  maintenance card. The deck stays reachable while frozen.
+- **Deck** — `/deck`: the arena's controls, behind a key. See **The Super Deck**
+  below.
 - **Multiplayer is asynchronous** — one shared global education, spectator
   rail, leaderboards, challenge links. There is **no live PvP**, and the copy
   says so.
 
+## The Super Deck (Phase 2.5)
+
+`/deck` is a god-mode toybox in the same neon skin — chunky arcade controls,
+LEDs that mean things — and every control is *real*: each one is proven in the
+verify walk to change the referee's math or the arena's face, never just the
+page.
+
+- **THE WALL** — live readouts: the education meter (shapes / fighters /
+  bouts), today's verdict tallies from the full ledger (breached / thrown out
+  / caught / turned back), the latest fights, and the top of the leaderboard.
+  The meter and rail keep polling while the deck is open.
+- **STORM** — fire a timed event (deck sets the minutes, default 30). While
+  it runs, every settled verdict pays **double points** and the Twin's
+  aggression has a floor at storm level (1.6) no matter how low the dial
+  sits — the strike schedule and the gate's healing both answer to it. The
+  weather is snapshotted onto each fight at start, so the referee settles a
+  round under the weather it was actually fought in. Landing and arena carry
+  the storm banner; the deck shows the storm clock and can calm it early.
+- **THE TWIN SPEAKS** — a broadcast box: the deck writes a line (plain text,
+  140 characters, HTML-escaped everywhere it renders) and the Twin says it to
+  the whole arena — banner on the landing and in the arena — until its expiry
+  (deck-set minutes, or blank for until-cleared) or until it is silenced.
+- **OPEN THE FLOODGATES** — a chaos toggle: while on, **trace gains halve**
+  across the arena. The halving is dealt into each new fight's stats at
+  start, so the referee and the client's HUD read the same halved costs (a
+  Decoy's trace *dump* is not a gain and is never halved). The arena shows
+  the state on its face while it lasts; the deck keeps its warning lit.
+- **SPOTLIGHT** — pin any real fighter's challenge — by fighter id or by
+  challenge token — to the landing as **Tonight's Devil**, with their photo,
+  record and challenge link. A pin that matches no fighter is refused with a
+  plain error and changes nothing.
+- **The dials & the big switch** — the Phase 1 controls, unchanged: Twin
+  aggression (gate healing + strike rate), learning speed, and FREEZE, which
+  closes the arena behind a maintenance card while the deck stays reachable.
+
+### The member-key tie
+
+The deck answers to two keys:
+
+- **`ADMIN_KEY`** — the break-glass key from the environment. It always
+  works, for everything, including tying and untying.
+- **The owner's Gatekeeper Member Key** — after a one-time **tie**. Opened
+  with the admin key, the deck offers "Tie this deck to my Member Key": the
+  owner pastes his Member Key *once* into that form (on the live site, over
+  HTTPS). The server stores **only a scrypt hash** of it — the same hashing
+  as fighter passwords — as the deck's member tie. The key value itself is
+  never stored, logged, or echoed into any page. From then on the deck also
+  opens by pasting the Member Key at the deck door (mirroring Gatekeeper's
+  own "Sign in with my Member Key"); that sign-in mints a deck session
+  cookie so the key never rides a URL or a form again. A **remove-tie**
+  control (admin key required) clears the hash and every member deck
+  session.
+- The tie also **binds the owner's fighter**: linking creates — or claims,
+  if one already exists — the arena profile under his Gatekeeper identity
+  (email `stevenh18818@gmail.com`, display name **Steven Hall**, flagged as
+  the house owner), so his profile, his devil, and his grudge page are
+  *him*, the member, not a random signup.
+
 ## What it is not
 
-- HOLD THE GATE mode, the defender evolution web, seasons/generations, daily
-  storm events, Gatekeeper Member Key sign-in, chain receipts, and any
-  crossover of arena education into the live Shield — all later phases, per
-  the design sketch (`~/workspace/gatekeeper/THE-TWIN-ARENA-DESIGN-2026-11-26.md`).
+- HOLD THE GATE mode, the defender evolution web, seasons/generations,
+  Gatekeeper Member Key sign-in *as a fighter login* (the member key opens
+  the deck via the tie above; fighter sign-in is still email + password),
+  chain receipts, and any crossover of arena education into the live
+  Shield — all later phases, per the design sketch
+  (`~/workspace/gatekeeper/THE-TWIN-ARENA-DESIGN-2026-11-26.md`).
 - The Twin's "learning" is pattern memory + counter-adaptation + evolution
   trees — real learning in the game sense, not a language model. The copy
   never claims more.
@@ -136,8 +194,9 @@ biggest button in the room when a haymaker winds up.
 ## Verify
 
 ```
-npm run verify   # boots a throwaway instance on :4199 with a temp DATA_DIR and
-                 # walks the full member path over HTTP, printing evidence per step
+npm run verify   # two batteries: scripts/verify.mjs (:4199) walks the full
+                 # member path over HTTP; scripts/verify-deck.mjs (:4198)
+                 # walks the Super Deck. Both use temp DATA_DIRs.
 ```
 
 Phase 2's walk (49 checks) covers everything Phase 1 proved, plus: strikes
@@ -149,6 +208,20 @@ spam caught mid-round by the trace — including a false "win" claim resolving
 as caught; whisper-led play keeping the trace near zero; a Decoy dumping trace
 measured in the referee itself; and the aggression dial measurably changing
 the strike rate (37 strikes vs 9 across a full round at 2.0 vs 0.5).
+
+Phase 2.5's walk (50 more checks, 99 total) proves the Super Deck end to end:
+floodgates halving a loud log's trace in the referee (14 → 7, in the dealt
+stats and in a settled verdict's peak trace); a storm settling an identical
+win for exactly double points, its aggression floor overriding a 0.5 dial
+(gate regen 1.76, strike count up), the storm banner on the door, and a calm
+idle loss paying 13 against the storm's 26; the broadcast standing on landing
+and arena, escaped, and cleared; the spotlight pinned by token and by fighter
+id, a bogus pin refused with the real pin untouched; and the member-key tie —
+the raw test key asserted *absent* from the data file, only its scrypt hash
+stored, the owner fighter bound as Steven Hall under the member email, the
+member key opening the deck and working a control through its session cookie,
+a wrong key refused, the admin key working throughout, and remove-tie
+clearing it all. The Phase 1 dial/freeze battery is re-run as regression.
 
 **UNTESTED, plainly:** the by-eye / by-finger feel of the fight — telegraph
 readability, parry timing on a real phone, screen shake, the glitch skin in a

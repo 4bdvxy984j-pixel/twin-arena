@@ -10,6 +10,14 @@
         document.getElementById('m-shapes').textContent = d.meter.shapes;
         document.getElementById('m-fighters').textContent = d.meter.fighters;
         document.getElementById('m-bouts').textContent = d.meter.bouts;
+        // Super Deck weather, kept honest between page loads.
+        var speak = document.getElementById('speak-text');
+        if (speak && d.broadcast) speak.textContent = d.broadcast;
+        var stormLine = document.getElementById('storm-line');
+        if (stormLine && d.storm && d.storm.active) {
+          var mins = Math.max(1, Math.round(d.storm.secsLeft / 60));
+          stormLine.textContent = 'About ' + mins + ' minute' + (mins === 1 ? '' : 's') + ' left in the storm.';
+        }
         var rail = document.getElementById('rail');
         if (rail && d.fights.length) {
           var howText = function (f) {

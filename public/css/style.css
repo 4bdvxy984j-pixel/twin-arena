@@ -110,6 +110,78 @@ main{max-width:1060px; margin:0 auto; padding:1.2rem 1rem 3rem}
 .how{color:var(--dim); padding-left:1.2rem; line-height:1.55}
 .how strong{color:var(--ink)}
 
+/* super deck weather — banners on the door and in the arena */
+.banner{max-width:1060px; margin:1rem auto 0; padding:.75rem 1.1rem; font-size:1rem; clip-path:var(--cut);
+  border:1px solid var(--line); background:linear-gradient(180deg, var(--panel2), var(--panel))}
+.banner strong{letter-spacing:.04em}
+.stormbanner{border-color:var(--yellow); border-left:5px solid var(--yellow); color:#fff8c4;
+  box-shadow:0 0 26px rgba(252,238,10,.22); animation:stormpulse 1.6s ease-in-out infinite}
+@keyframes stormpulse{0%,100%{box-shadow:0 0 18px rgba(252,238,10,.15)}50%{box-shadow:0 0 34px rgba(252,238,10,.35)}}
+.speakbanner{border-left:5px solid var(--cyan); color:var(--ink); font-size:1.08rem}
+.speak-tag{display:inline-block; background:var(--cyan); color:#04121a; font-weight:900; font-size:.72rem;
+  letter-spacing:.14em; padding:.18rem .5rem; margin-right:.6rem; vertical-align:2px}
+.floodbanner{border-left:5px solid var(--violet); color:#e9dcff}
+.arena-wrap .banner{margin:0 0 .9rem}
+.v-storm{color:var(--yellow); font-weight:700}
+
+/* spotlight — tonight's devil, pinned to the door */
+.devilcard{display:flex; gap:1.2rem; align-items:center; flex-wrap:wrap; max-width:1060px; margin:1.1rem auto 0;
+  background:linear-gradient(120deg, #2a0a18, #0b0e16 65%); border:1px solid var(--mag); border-left:5px solid var(--mag);
+  padding:1.1rem 1.3rem; clip-path:var(--cut); box-shadow:0 0 34px rgba(255,42,109,.22)}
+.devilcard .devil-info{flex:1; min-width:220px}
+.devilcard h2{margin:.25rem 0 .3rem; font-size:1.25rem}
+.devil-tag{color:var(--gold); font-weight:900; letter-spacing:.16em; font-size:.8rem; text-shadow:0 0 12px rgba(252,238,10,.5)}
+
+/* the super deck — arcade cyberdeck */
+.deckwrap{max-width:1060px; margin:0 auto}
+.deckwrap h1{font-size:clamp(1.7rem,4.5vw,2.5rem); font-style:italic; margin:.4rem 0 .3rem}
+.decksub{font-size:.85rem; color:var(--yellow); letter-spacing:.22em; font-style:normal; vertical-align:middle}
+.deckgrid{display:grid; grid-template-columns:1fr 1fr; gap:1.1rem; margin-top:1.1rem}
+@media(max-width:820px){.deckgrid{grid-template-columns:1fr}}
+.deckpanel{background:linear-gradient(180deg, var(--panel2), var(--panel)); border:1px solid var(--line);
+  border-top:3px solid var(--cyan); padding:1.1rem 1.2rem; margin-top:1.1rem; clip-path:var(--cut);
+  box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.deckgrid .deckpanel{margin-top:0}
+.deckpanel h2{margin:.1rem 0 .7rem; font-size:1.05rem; letter-spacing:.1em}
+.deckpanel h3{margin:1rem 0 .4rem; font-size:.9rem; color:var(--dim); letter-spacing:.1em}
+.deckpanel.stormp{border-top-color:var(--yellow)}
+.deckpanel.speakp{border-top-color:var(--cyan)}
+.deckpanel.floodp{border-top-color:var(--violet)}
+.deckpanel.spotp{border-top-color:var(--mag)}
+.deckpanel.tiep{border-top-color:var(--gold)}
+.deckpanel.wall{border-top-color:var(--good)}
+.led{display:inline-block; width:12px; height:12px; margin-right:.55rem; vertical-align:-1px;
+  background:#2a3342; border:1px solid var(--line)}
+.led.on{background:var(--good); box-shadow:0 0 12px var(--good); border-color:var(--good)}
+.led.on.gold{background:var(--yellow); box-shadow:0 0 12px var(--yellow); border-color:var(--yellow)}
+.led.on.violet{background:var(--violet); box-shadow:0 0 12px var(--violet); border-color:var(--violet)}
+.led.on.pink{background:var(--mag); box-shadow:0 0 12px var(--mag); border-color:var(--mag)}
+.deckform{display:flex; flex-direction:column; gap:.8rem; margin-top:.9rem}
+.deckform label{display:flex; flex-direction:column; gap:.35rem; color:var(--dim); font-size:.92rem}
+.deckform input{background:#070a10; border:1px solid var(--line); color:var(--ink); padding:.7rem .8rem; font-size:1rem; border-radius:0}
+.deckform input:focus{outline:2px solid var(--cyan); border-color:transparent}
+.deckform label.check{flex-direction:row; align-items:center; gap:.6rem; color:var(--ink)}
+.deckform button[type=submit]{align-self:flex-start}
+.bigbtn{background:#1a2231; color:var(--ink); border:1px solid var(--line); cursor:pointer;
+  padding:.85rem 1.5rem; font-weight:900; letter-spacing:.08em; text-transform:uppercase; font-size:1rem;
+  clip-path:var(--cut); transition:transform .1s, box-shadow .12s, background .12s}
+.bigbtn:hover{transform:translateY(-2px)}
+.bigbtn.storm{background:var(--yellow); color:#0a0a05; box-shadow:0 0 26px rgba(252,238,10,.4)}
+.bigbtn.speak{background:var(--cyan); color:#04121a; box-shadow:0 0 22px rgba(0,229,255,.35)}
+.bigbtn.flood{background:var(--violet); color:#14041f; box-shadow:0 0 22px rgba(185,103,255,.4)}
+.bigbtn.spot{background:var(--mag); color:#fff; box-shadow:0 0 22px rgba(255,42,109,.4)}
+.bigbtn.tie{background:var(--gold); color:#0a0a05; box-shadow:0 0 22px rgba(252,238,10,.3)}
+.bigbtn.danger{background:#3a0d18; color:#ffb3c1; border-color:var(--bad)}
+.twinline{border-left:4px solid var(--cyan); margin:.6rem 0 .2rem; padding:.5rem .9rem; background:#0a0d14;
+  font-size:1.12rem; font-style:italic; color:var(--ink)}
+.wallstats{display:flex; gap:2rem; flex-wrap:wrap; margin:.4rem 0 .2rem}
+.wallstats div{display:flex; flex-direction:column}
+.wallstats strong{font-size:1.7rem; color:var(--cyan); font-variant-numeric:tabular-nums}
+.wallstats strong.good{color:var(--good)}
+.wallstats span{color:var(--dim); font-size:.78rem; letter-spacing:.1em; text-transform:uppercase}
+.wallstats.tally strong{color:var(--yellow)}
+.wallstats.tally strong.good{color:var(--good)}
+
 /* maintenance */
 .maint{text-align:center; padding:5rem 1rem}
 .maint-gate{font-size:5rem; color:var(--yellow); text-shadow:0 0 40px var(--yellow); animation:pulse 2.4s infinite}

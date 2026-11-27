@@ -42,6 +42,20 @@ const STRIKE = {
   cycle: ['clean', 'glance', 'clean', 'haymaker']
 };
 
+// ---- The Super Deck's weather (Phase 2.5) ----------------------------------
+// STORM: a deck-fired event. While it runs, verdict points double and the
+// Twin's aggression has a floor — the storm level — no matter how low the
+// dial sits. The state is a deadline on the config; fights snapshot it at
+// start, so a round already underway keeps the weather it was dealt.
+const STORM = { aggression: 1.6, pointsMult: 2 };
+function stormActive(state) {
+  return !!(state && state.config && state.config.stormUntil && Date.now() < state.config.stormUntil);
+}
+function effectiveAggression(state) {
+  const base = (state && state.config && state.config.aggression) || 1;
+  return stormActive(state) ? Math.max(base, STORM.aggression) : base;
+}
+
 // Evolution web — attacker branches, 12 nodes, 3 tiers each.
 const NODES = [
   { id: 'vec1', branch: 'Vectors',   tier: 1, cost: 30,  name: 'Sharper Probes',  desc: 'Probe damage +35%.' },
@@ -95,7 +109,11 @@ function effectiveStats(state, player, armorMap) {
       name: t.name, cost, cooldown: Math.round(cd),
       dmg: +(dmg * mult).toFixed(2), rawDmg: +dmg.toFixed(2),
       dot: +(dot * mult).toFixed(2), dotSecs: t.dotSecs || 0,
-      trace: t.trace,
+      // FLOODGATES (deck toggle): trace gains are halved, dealt into the
+      // stats here so the referee and the client's own HUD read the same
+      // halved costs — one truth, server-side. (A Decoy's dump is not a
+      // gain and is never halved.)
+      trace: t.trace > 0 && state.config.floodgates ? t.trace / 2 : t.trace,
       familiarity: +fam.toFixed(3), armor: +(armor + globalArmor).toFixed(3),
       color: t.color, blurb: t.blurb
     };
@@ -103,7 +121,7 @@ function effectiveStats(state, player, armorMap) {
   return {
     tools,
     gateHp: GATE_HP,
-    gateRegen: +(GATE_REGEN * (state.config.aggression || 1) * (has(player, 'pat2') ? 0.8 : 1)).toFixed(2),
+    gateRegen: +(GATE_REGEN * effectiveAggression(state) * (has(player, 'pat2') ? 0.8 : 1)).toFixed(2),
     energyMax: ENERGY_MAX + (has(player, 'spd3') ? 20 : 0),
     energyRegen: +(ENERGY_REGEN * (has(player, 'spd2') ? 1.3 : 1)).toFixed(2),
     roundMs: ROUND_MS + (has(player, 'pat3') ? 25000 : 0),
@@ -355,6 +373,10 @@ function settleFight(state, player, fight, submission) {
     points = 10 + Math.round(Math.min(100, Math.max(0, damagePct || 0)) * 0.1);
   }
   points += Math.min(15, newToPlayer.length * 3);
+  // STORM: the whole verdict pays double — the multiplier was snapshotted
+  // onto the fight at start, so the referee settles under the weather the
+  // round was actually fought in.
+  if (fight.pointsMult && fight.pointsMult !== 1) points = Math.round(points * fight.pointsMult);
   player.points += points;
 
   // Record
@@ -373,7 +395,7 @@ function settleFight(state, player, fight, submission) {
     fighterName: player.displayName || 'A guest fighter',
     mode: fight.mode, challengeOwnerId: fight.challengeOwnerId || null,
     result, endReason: endReason || (result === 'win' ? 'breach' : 'timeout'),
-    secs, points,
+    secs, points, storm: !!fight.storm,
     shapesTaught: newToPlayer, shapesTaughtCount: newToPlayer.length,
     newToWorldCount: newToWorld.length,
     armorGains,
@@ -417,6 +439,7 @@ function fmtTime(secs) {
 module.exports = {
   TOOLS, TOOL_IDS, NODES, NODE_BY_ID, ROUND_MS, GATE_HP,
   PLAYER_HP, TRACE_MAX, TRACE_COOL, PARRY, STRIKE,
+  STORM, stormActive, effectiveAggression,
   has, familiarity, effectiveStats, extractPatterns, validateLog,
   makeStrikes, simulateRound,
   settleFight, educationMeter, fmtTime
