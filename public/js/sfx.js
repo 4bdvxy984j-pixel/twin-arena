@@ -188,6 +188,67 @@
         tone({ f0: f, dur: 0.13, type: 'triangle', gain: 0.21, at: i * 0.08 });
       });
       tone({ f0: 1975, dur: 0.1, gain: 0.10, at: 0.24 });
+    },
+    // ---- Phase 3: the deck speaks -------------------------------------
+    overdrive: function () { // one huge hit — a flood with a chest cavity
+      tone({ f0: 60, f1: 220, dur: 0.28, type: 'sawtooth', gain: 0.42 });
+      noise({ dur: 0.3, gain: 0.34, freq: 900, f1: 2400 });
+      tone({ f0: 440, f1: 880, dur: 0.18, type: 'square', gain: 0.14, at: 0.05 });
+    },
+    ghost: function () { // traceless — a held breath, barely there
+      tone({ f0: 1320, f1: 660, dur: 0.3, type: 'sine', gain: 0.10 });
+      noise({ dur: 0.25, gain: 0.05, ftype: 'highpass', freq: 5000 });
+    },
+    secondWind: function () { // breath comes back — warm rising triad
+      [392, 523, 659].forEach(function (f, i) {
+        tone({ f0: f, dur: 0.2, type: 'triangle', gain: 0.20, at: i * 0.07 });
+      });
+    },
+    rapid: function () { // cycling up — quickening ticks
+      for (var i = 0; i < 6; i++) {
+        tone({ f0: 700 + i * 130, dur: 0.045, type: 'square', gain: 0.13, at: i * (0.09 - i * 0.008) });
+      }
+    },
+    combo: function () { // a combo lands — two notes snapping together
+      tone({ f0: 988, dur: 0.07, type: 'square', gain: 0.16 });
+      tone({ f0: 1480, dur: 0.12, type: 'square', gain: 0.18, at: 0.06 });
+      noise({ dur: 0.08, gain: 0.08, ftype: 'bandpass', freq: 2400, q: 2, at: 0.05 });
+    },
+    morph: function () { // the armor sheds and re-forms — metal tearing, then a new hum-note
+      noise({ dur: 0.4, gain: 0.30, ftype: 'bandpass', freq: 700, f1: 2600, q: 1.4 });
+      tone({ f0: 140, f1: 55, dur: 0.35, type: 'sawtooth', gain: 0.30 });
+      tone({ f0: 587, dur: 0.3, type: 'triangle', gain: 0.16, at: 0.32 });
+      tone({ f0: 880, dur: 0.22, type: 'triangle', gain: 0.12, at: 0.4 });
+    },
+    feintReveal: function () { // cracked glass — the Wrap shows the lie
+      noise({ dur: 0.09, gain: 0.22, ftype: 'bandpass', freq: 3400, q: 3 });
+      tone({ f0: 2093, dur: 0.07, gain: 0.12, at: 0.02 });
+      tone({ f0: 1568, dur: 0.09, gain: 0.10, at: 0.07 });
+    },
+    whiff: function () { // a parry bites air
+      noise({ dur: 0.16, gain: 0.16, ftype: 'bandpass', freq: 1200, f1: 300, q: 1.2 });
+    },
+    heart: function () { // the Second Heart breaks — a crack, then a heartbeat
+      noise({ dur: 0.08, gain: 0.3, ftype: 'bandpass', freq: 2000, q: 2 });
+      tone({ f0: 58, dur: 0.16, gain: 0.5, at: 0.1 });
+      tone({ f0: 52, dur: 0.2, gain: 0.44, at: 0.34 });
+      tone({ f0: 523, dur: 0.24, type: 'triangle', gain: 0.14, at: 0.4 });
+    },
+    bell: function () { // the Stillbell — one clear struck bell, long tail
+      tone({ f0: 1568, dur: 0.9, type: 'sine', gain: 0.22 });
+      tone({ f0: 2093, dur: 0.6, type: 'sine', gain: 0.10, at: 0.01 });
+      tone({ f0: 2637, dur: 0.35, type: 'sine', gain: 0.06, at: 0.02 });
+    },
+    drop: function () { // an item falls into the satchel — a soft chime
+      tone({ f0: 1175, dur: 0.12, type: 'triangle', gain: 0.18 });
+      tone({ f0: 1568, dur: 0.18, type: 'triangle', gain: 0.16, at: 0.08 });
+    },
+    legendary: function () { // a LEGENDARY drop — the full ceremony
+      [523, 659, 784, 1046, 1318, 1568].forEach(function (f, i) {
+        tone({ f0: f, dur: 0.34, type: 'triangle', gain: 0.22, at: i * 0.09 });
+      });
+      noise({ dur: 0.5, gain: 0.06, ftype: 'highpass', freq: 7000, at: 0.1 });
+      tone({ f0: 2093, dur: 0.5, type: 'sine', gain: 0.12, at: 0.55 });
     }
   };
   function crack(gain, snaps) {

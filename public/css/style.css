@@ -323,3 +323,85 @@ button[type=submit]:not(.fightbtn){background:#1a2231; color:var(--ink); border:
 .evolvebtn{background:var(--yellow); color:#0a0a05; border:0;
   padding:.45rem 1.1rem; font-weight:900; cursor:pointer; margin-top:.4rem; text-transform:uppercase; clip-path:var(--cut)}
 .evolvebtn:disabled{opacity:.4; cursor:not-allowed}
+
+/* ---- Phase 3: the Command Deck ------------------------------------------ */
+.tool .tdmg{display:block; font-size:.78rem; font-weight:700; letter-spacing:.08em; color:var(--ink)}
+.kit.abilities{margin-top:.55rem}
+.tool.ability{border-top-color:var(--tc,#b967ff)}
+.tool.ability.spent{opacity:.38; filter:grayscale(.6)}
+.tool.ability.heartpod{cursor:default; border-style:dashed; display:flex; flex-direction:column; justify-content:center; gap:.15rem; padding:.55rem .6rem}
+.tool.ability.heartpod.spent{opacity:.38}
+.twinread{margin-top:.7rem; padding:.5rem .8rem; border:1px solid var(--line); border-left:3px solid var(--violet);
+  background:linear-gradient(90deg, rgba(185,103,255,.10), transparent 70%); font-size:.86rem; letter-spacing:.05em; color:var(--ink)}
+.winframe{position:absolute; top:.7rem; left:50%; transform:translateX(-50%); z-index:5; min-width:240px;
+  padding:.35rem .8rem .5rem; border:2px solid var(--gold); color:var(--gold); text-align:center;
+  background:rgba(10,10,4,.82); font-weight:800; letter-spacing:.14em; box-shadow:0 0 24px rgba(252,238,10,.45)}
+.winframe i{display:block; height:4px; margin-top:.3rem; background:var(--gold)}
+.stage{position:relative}
+.parrybtn{position:relative; overflow:hidden}
+.parry-charge{position:absolute; left:0; bottom:0; height:4px; background:var(--cyan); width:100%}
+.combos-legend{display:flex; flex-wrap:wrap; gap:.4rem 1.2rem; margin-top:.6rem; font-size:.8rem; color:var(--dim)}
+.combos-legend strong{color:var(--gold); letter-spacing:.05em}
+.itempanel{margin:.8rem auto 0; max-width:520px; text-align:left; border:1px solid var(--line); background:rgba(11,14,22,.9); padding:.6rem .9rem}
+.itempanel h3{margin:.1rem 0 .5rem; font-size:.8rem; color:var(--dim)}
+.itemopt{display:block; margin:.45rem 0; font-size:.88rem; line-height:1.45; cursor:pointer}
+.itemopt select{margin-left:.4rem; background:var(--panel2); color:var(--ink); border:1px solid var(--line); padding:.25rem}
+.itemopt.legendary{border-left:3px solid #ffd700; padding-left:.6rem}
+.itemopt.epic{border-left:3px solid var(--violet); padding-left:.6rem}
+
+/* rarity tiers — LEGENDARY gold is the Wrap's alone; FOUNDER burns ember */
+.rarity{font-size:.68rem; font-weight:800; letter-spacing:.16em; padding:.08rem .4rem; border:1px solid; vertical-align:middle}
+.rarity.legendary{color:#ffd700; border-color:#ffd700; background:rgba(255,215,0,.10); text-shadow:0 0 8px rgba(255,215,0,.6)}
+.rarity.epic{color:var(--violet); border-color:var(--violet); background:rgba(185,103,255,.10)}
+.rarity.rare{color:var(--cyan); border-color:var(--cyan); background:rgba(0,229,255,.08)}
+.rarity.founder{color:#ff9a3c; border-color:#ff9a3c; background:rgba(255,122,26,.12); text-shadow:0 0 8px rgba(255,140,40,.55)}
+
+/* ---- Phase 3: the Pit ---------------------------------------------------- */
+.pitwrap{max-width:1060px; margin:0 auto; padding:1rem}
+.lede.small{font-size:.95rem; line-height:1.55}
+.sortlinks{font-size:.88rem; color:var(--dim)}
+.pitgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:.9rem; margin-top:1rem}
+.pitcard{border:1px solid var(--line); background:linear-gradient(180deg, var(--panel2), var(--panel)); padding:.9rem 1rem; clip-path:var(--cut)}
+.pitcard.is-mirage{border-color:rgba(185,103,255,.55)}
+.pitcard.is-armor{border-color:rgba(255,107,157,.6); box-shadow:0 0 18px rgba(255,42,109,.15)}
+.pit-head{display:flex; gap:.7rem; align-items:flex-start}
+.p-face.small{width:44px; height:44px}
+.pit-title{flex:1}
+.pit-title h3{margin:.1rem 0 .2rem; font-size:1rem}
+.pit-title p{margin:0; font-size:.8rem}
+.pit-bounty{text-align:right}
+.pit-bounty strong{display:block; font-size:1.5rem; color:var(--gold); line-height:1}
+.pit-bounty span{font-size:.68rem; letter-spacing:.12em; color:var(--dim); text-transform:uppercase}
+.taunt{font-style:italic; color:var(--yellow); margin:.6rem 0 .2rem}
+.embermark{color:#ff9a3c; font-size:.85rem; margin:.3rem 0}
+.pit-stats{font-size:.86rem; line-height:1.5}
+.pit-gate{margin-top:.6rem}
+.classchip{font-size:.7rem; font-weight:800; letter-spacing:.1em; padding:.1rem .45rem; border:1px solid var(--line); text-transform:uppercase}
+.classchip.c0{color:#9ad1ff}.classchip.c1{color:#ffb03c}.classchip.c2{color:#ff7a59}
+.classchip.c3{color:#ff2a6d}.classchip.c4{color:#ffd700; border-color:#ffd700}
+.badge{font-size:.68rem; font-weight:800; letter-spacing:.12em; padding:.12rem .45rem; border:1px solid; text-transform:uppercase}
+.badge.mirage{color:var(--violet); border-color:var(--violet); background:rgba(185,103,255,.12)}
+.badge.armor{color:#ff6b9d; border-color:#ff6b9d; background:rgba(255,42,109,.12)}
+.pit-banner{border-left-color:var(--violet)}
+
+/* ---- Phase 3: profile — levels, satchel, provenance ---------------------- */
+.level-line{display:flex; align-items:center; gap:.6rem; flex-wrap:wrap}
+.xpbar{display:inline-block; width:150px; height:8px; background:#131a26; border:1px solid var(--line); vertical-align:middle}
+.xpbar i{display:block; height:100%; background:linear-gradient(90deg, var(--cyan), var(--violet))}
+ul.items{list-style:none; padding:0; margin:.4rem 0}
+.itemline{padding:.45rem .6rem; margin:.35rem 0; border:1px solid var(--line); border-left:3px solid var(--cyan); background:rgba(16,20,31,.7); font-size:.9rem}
+.itemline.legendary{border-left-color:#ffd700; background:linear-gradient(90deg, rgba(255,215,0,.12), rgba(16,20,31,.7) 65%); box-shadow:0 0 14px rgba(255,215,0,.18)}
+.itemline.epic{border-left-color:var(--violet)}
+.itemline.founder{border-left-color:#ff9a3c; background:linear-gradient(90deg, rgba(255,122,26,.13), rgba(16,20,31,.7) 65%)}
+ul.items.spent .itemline{opacity:.62}
+.boardh{font-size:.85rem; color:var(--dim); margin:1rem 0 .3rem}
+.founders-line{margin-top:.8rem}
+
+/* verdict extras */
+.dropbanner{padding:.55rem .8rem; margin:.5rem 0; border:1px solid var(--cyan); font-size:.92rem}
+.dropbanner.legendary{border-color:#ffd700; color:#ffe970; background:linear-gradient(90deg, rgba(255,215,0,.20), rgba(255,215,0,.04)); box-shadow:0 0 22px rgba(255,215,0,.35); font-size:1.02rem; text-align:center}
+.dropbanner.epic{border-color:var(--violet); color:#d9b8ff}
+.dropbanner.founder{border-color:#ff9a3c; color:#ffb27a}
+.v-gear{color:#ff9db8}
+.v-xp{color:var(--good); font-weight:700}
+.v-combos{color:var(--gold)}

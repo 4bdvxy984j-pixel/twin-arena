@@ -394,6 +394,65 @@ try {
       `trace ${simA.trace} -> ${simB.trace} after one decoy`);
   }
 
+  // 19 — PHASE 3: the Command Deck surfaces + a real ability used in a real fight
+  {
+    const arena = await (await call(guest, 'GET', '/arena')).text();
+    check('deck: arena carries the read line, gold window frame, ability row',
+      arena.includes('id="twinread"') && arena.includes('id="winframe"') && arena.includes('id="abilities"'));
+    check('deck: combos legend printed on the deck', arena.includes('MARK &amp; DROWN') || arena.includes('MARK & DROWN'));
+    check('deck: tool pods carry damage lines', arena.includes('id="kit"'));
+    const pitHtml = await (await call(null, 'GET', '/pit')).text();
+    check('pit: the hall renders', pitHtml.includes('The Pit') && pitHtml.includes('Asynchronous by design'));
+    const land = await (await call(null, 'GET', '/')).text();
+    check('landing carries the Pit boards + the founders count', land.includes('devil boards') && land.includes("Founders' Embers"));
+
+    // a FRESH fighter grinds the Deception path (the section-2 guest has
+    // taught the Twin too much by now for reliable planned wins)
+    const rookie = new Jar();
+    let me = await json(rookie, 'GET', '/api/me');
+    // wins pay ~74, settled losses ~15 — the stock policy wins its first
+    // bout then gets caught on trace, so settle whatever the referee says
+    for (let i = 0; i < 10 && me.body.points < 90; i++) {
+      const s = await json(rookie, 'POST', '/api/fight/start', {});
+      const plan = planWin(s.body.stats, s.body.strikes);
+      const oc = plan.sim.outcome;
+      await json(rookie, 'POST', '/api/fight/finish', {
+        fightId: s.body.fightId, actions: plan.actions,
+        result: oc ? oc.result : 'lose', endReason: oc ? oc.endReason : 'timeout',
+        durationMs: plan.durationMs || s.body.stats.roundMs, damagePct: plan.sim.damagePct || 0
+      });
+      me = await json(rookie, 'GET', '/api/me');
+    }
+    check('deck: ground enough points for the Deception path', me.body.points >= 90, `points=${me.body.points}`);
+    const e1 = await json(rookie, 'POST', '/api/evolve', { node: 'dec1' });
+    const e2 = await json(rookie, 'POST', '/api/evolve', { node: 'dec2' });
+    check('deck: dec1 + dec2 bought (Ghost Hands)', e1.body.ok === true && e2.body.ok === true, JSON.stringify(e2.body));
+    const s = await json(rookie, 'POST', '/api/fight/start', {});
+    check('deck: GHOST pod is dealt into the fight stats', !!(s.body.stats.abilities && s.body.stats.abilities.ghost),
+      JSON.stringify(Object.keys(s.body.stats.abilities || {})));
+    // plan a winning bout that opens with GHOST (pseudo-tool trick for the planner)
+    const pstats = JSON.parse(JSON.stringify(s.body.stats));
+    pstats.tools['ability:ghost'] = { cost: 25, cooldown: 30000, trace: 0 };
+    planLog._parried = new Set();
+    const actions = planLog(pstats, s.body.strikes, (v) => {
+      if (v.t >= 600 && v.ready('ability:ghost')) return 'ability:ghost';
+      return makeWinPolicy()(v);
+    });
+    const sim = game.simulateRound({ stats: s.body.stats, strikes: s.body.strikes }, actions, s.body.stats.roundMs);
+    check('deck: referee accepts the GHOST line (no forgery, ability recorded)',
+      !sim.problem && sim.abilitiesUsed.includes('ghost'),
+      `problem=${sim.problem} used=${JSON.stringify(sim.abilitiesUsed)} outcome=${JSON.stringify(sim.outcome)}`);
+    const oc = sim.outcome;
+    const fin = await json(rookie, 'POST', '/api/fight/finish', {
+      fightId: s.body.fightId, actions: oc ? actions.filter(a => a.t <= oc.at + 250) : actions,
+      result: oc ? oc.result : 'lose', endReason: oc ? oc.endReason : 'timeout',
+      durationMs: oc ? oc.at + 250 : s.body.stats.roundMs, damagePct: sim.damagePct || 0
+    });
+    const v = fin.body.verdict || {};
+    check('deck: settled verdict records the ability + XP', !!v.fightStats && (v.fightStats.abilitiesUsed || []).includes('ghost') && v.xp > 0,
+      `xp=${v.xp} used=${JSON.stringify(v.fightStats && v.fightStats.abilitiesUsed)}`);
+  }
+
   // 18 — deck: aggression dial changes the gate AND the strike rate; freeze closes the arena; deck survives the freeze
   {
     const deck = await call(null, 'GET', '/deck?key=' + ADMIN);

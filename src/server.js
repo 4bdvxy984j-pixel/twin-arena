@@ -15,6 +15,26 @@ store.load();
 const state = store.get();
 const activeFights = new Map(); // fightId -> fight (memory only; a restart voids open rounds)
 
+// THE KEEPER'S SET: if the house owner fighter already exists (the deck was
+// tied in an earlier age), grant the master set now — at boot, before any
+// fight can settle a drop, so on a fresh world the Keeper's pieces are
+// serial No. 1 of each type. If the tie comes later, the tie route grants it.
+if (!state.itemsSeq) state.itemsSeq = {};
+for (const itemId of Object.keys(game.ITEMS)) if (typeof state.itemsSeq[itemId] !== 'number') state.itemsSeq[itemId] = 0;
+if (state.deck && state.deck.ownerPlayerId && state.players[state.deck.ownerPlayerId]) {
+  if (game.grantKeeperSet(state, ensurePlayer(state.players[state.deck.ownerPlayerId]))) store.save(true);
+}
+// Founder's Embers for members claimed before Phase 3 existed: granted in
+// signup order (the Keeper already holds No. 1 via his set), idempotently,
+// until the 100 are gone — then never again.
+{
+  const members = Object.values(state.players).filter(x => x.email)
+    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  let granted = false;
+  for (const m of members) if (game.grantFounderEmber(state, ensurePlayer(m))) granted = true;
+  if (granted) store.save(true);
+}
+
 const rid = (n) => crypto.randomBytes(n).toString('hex');
 
 // ---------- helpers ----------
@@ -68,18 +88,55 @@ function newPlayer(displayName) {
     photo: null, points: 0, nodes: {}, shapes: {},
     twinArmor: {}, challengeToken: rid(10),
     record: { bouts: 0, breaches: 0, streak: 0, bestSecs: null },
-    challengeFeed: [], publicProfile: true, createdAt: Date.now(), lastFightAt: null
+    challengeFeed: [], publicProfile: true, createdAt: Date.now(), lastFightAt: null,
+    // Phase 3: progression + the Pit
+    xp: 0, toolUse: {}, parriesTotal: 0,
+    taunt: '', devilShapes: {},
+    devil: { bounty: game.PIT.bountyBase, bountyDay: game.dayKey(Date.now()), held: 0, breached: 0, lastBreachedBy: null, breachedBy: [] },
+    pitAttack: { bouts: 0, breaches: 0 },
+    itemStock: { mirrorwrap: [], anchorstitch: [] }, itemHistory: [],
+    pitAttempts: {}, defenseXpDay: { day: game.dayKey(Date.now()), count: 0 }
   };
   state.players[p.id] = p;
   return p;
 }
+// Records written before Phase 3 lack the new fields; fill them in place.
+function ensurePlayer(p) {
+  if (!p) return p;
+  if (typeof p.xp !== 'number') p.xp = 0;
+  if (!p.toolUse) p.toolUse = {};
+  if (typeof p.parriesTotal !== 'number') p.parriesTotal = 0;
+  if (typeof p.taunt !== 'string') p.taunt = '';
+  if (!p.devilShapes) p.devilShapes = {};
+  if (!p.devil) p.devil = { bounty: game.PIT.bountyBase, bountyDay: game.dayKey(Date.now()), held: 0, breached: 0, lastBreachedBy: null, breachedBy: [] };
+  if (!p.pitAttack) p.pitAttack = { bouts: 0, breaches: 0 };
+  if (!p.itemStock) {
+    // Migrate any bare pre-edition counts into numbered stock, in order.
+    p.itemStock = { mirrorwrap: [], anchorstitch: [] };
+    p.itemHistory = p.itemHistory || [];
+    for (const itemId of Object.keys(game.ITEMS)) {
+      const n = (p.items && p.items[itemId]) || 0;
+      for (let i = 0; i < n; i++) game.mintItem(state, p, itemId, 'migration');
+    }
+  }
+  if (!p.itemHistory) p.itemHistory = [];
+  if (!p.pitAttempts) p.pitAttempts = {};
+  if (!p.defenseXpDay) p.defenseXpDay = { day: game.dayKey(Date.now()), count: 0 };
+  return p;
+}
+// Item counts as a plain object, for the surfaces that just need numbers.
+function itemCounts(p) {
+  const out = {};
+  for (const itemId of Object.keys(game.ITEMS)) out[itemId] = game.itemCount(p, itemId);
+  return out;
+}
 function identity(req, res) {
   const c = cookies(req);
   if (c.ta_sess && state.sessions[c.ta_sess] && state.players[state.sessions[c.ta_sess]]) {
-    return state.players[state.sessions[c.ta_sess]];
+    return ensurePlayer(state.players[state.sessions[c.ta_sess]]);
   }
   if (c.ta_gid && state.players[c.ta_gid] && !state.players[c.ta_gid].email) {
-    return state.players[c.ta_gid];
+    return ensurePlayer(state.players[c.ta_gid]);
   }
   const g = newPlayer(null);
   setCookie(res, 'ta_gid', g.id, 365);
@@ -188,21 +245,38 @@ async function route(req, res) {
       const owner = Object.values(state.players).find(x => x.challengeToken === tok);
       if (owner) challenge = { token: tok, ownerName: owner.displayName || 'A fighter' };
     }
-    return sendHtml(res, views.arenaPage(state, me, challenge));
+    let pit = null;
+    const pitId = url.searchParams.get('pit');
+    if (pitId) {
+      const owner = ensurePlayer(state.players[pitId]);
+      if (owner && owner.email) {
+        const traits = game.devilTraits(owner);
+        pit = {
+          ownerId: owner.id, ownerName: owner.displayName || 'A fighter',
+          traits, bounty: game.bountyNow(owner, Date.now()),
+          myItems: itemCounts(me), myStock: me.itemStock || { mirrorwrap: [], anchorstitch: [] }
+        };
+      }
+    }
+    return sendHtml(res, views.arenaPage(state, me, challenge, pit));
+  }
+  if (method === 'GET' && p === '/pit') {
+    const sort = ['bounty', 'record', 'grudge'].includes(url.searchParams.get('sort')) ? url.searchParams.get('sort') : 'bounty';
+    return sendHtml(res, views.pitPage(state, me, sort));
   }
   if (method === 'GET' && p === '/login') return sendHtml(res, views.authPage(state, me, 'login'));
   if (method === 'GET' && p === '/signup') return sendHtml(res, views.authPage(state, me, 'signup'));
   if (method === 'GET' && p === '/profile') {
     if (!me.email) return sendHtml(res, views.authPage(state, me, 'signup'));
-    return sendHtml(res, views.profilePage(state, me));
+    return sendHtml(res, views.profilePage(state, me, { tauntError: url.searchParams.get('taunt') === 'bad' }));
   }
   if (method === 'GET' && p === '/web') {
     return sendHtml(res, views.webPage(state, me));
   }
   if (method === 'GET' && p.startsWith('/fighter/')) {
-    const f = state.players[p.slice('/fighter/'.length)];
+    const f = ensurePlayer(state.players[p.slice('/fighter/'.length)]);
     if (!f || !f.email) return sendHtml(res, views.shell('Not found', '<section class="authbox"><h1>No such fighter</h1></section>', me), 404);
-    return sendHtml(res, views.fighterPage(state, f));
+    return sendHtml(res, views.fighterPage(state, f, me));
   }
   if (method === 'GET' && p.startsWith('/challenge/')) {
     const tok = p.slice('/challenge/'.length);
@@ -254,6 +328,11 @@ async function route(req, res) {
     const rec = me.email ? newPlayer(name) : me;
     rec.email = email; rec.pass = hashPass(password);
     if (name) rec.displayName = name;
+    // THE FOUNDER'S EMBER: claiming a profile is the grant moment — the
+    // first 100 claimed members, in order, then the mint closes forever.
+    // Synchronous between the email check and the save: no two claims can
+    // take the same number, and re-login never re-grants.
+    game.grantFounderEmber(state, ensurePlayer(rec));
     store.save(true);
     startSession(res, rec);
     return redirect(res, '/profile');
@@ -289,7 +368,17 @@ async function route(req, res) {
     const leaders = Object.values(state.players)
       .filter(x => x.email && x.publicProfile !== false && x.record.bouts > 0)
       .sort((a, b) => (b.record.breaches - a.record.breaches) || (b.points - a.points)).slice(0, 8)
-      .map(x => ({ id: x.id, name: x.displayName, photo: x.photo, breaches: x.record.breaches, points: x.points }));
+      .map(x => ({ id: x.id, name: x.displayName, photo: x.photo, breaches: x.record.breaches, points: x.points, level: game.levelForXp(x.xp || 0) }));
+    // THE PIT's boards: devils that hold, devils worth hunting, hunters.
+    const members = Object.values(state.players).map(ensurePlayer).filter(x => x.email);
+    const pitTop = {
+      holds: members.filter(x => x.devil.held > 0).sort((a, b) => b.devil.held - a.devil.held).slice(0, 5)
+        .map(x => ({ id: x.id, name: x.displayName, holds: x.devil.held })),
+      bounties: members.slice().sort((a, b) => game.bountyNow(b, Date.now()) - game.bountyNow(a, Date.now())).slice(0, 5)
+        .map(x => ({ id: x.id, name: x.displayName, bounty: game.bountyNow(x, Date.now()) })),
+      hunters: members.filter(x => x.pitAttack.breaches > 0).sort((a, b) => b.pitAttack.breaches - a.pitAttack.breaches).slice(0, 5)
+        .map(x => ({ id: x.id, name: x.displayName, breaches: x.pitAttack.breaches }))
+    };
     const storm = game.stormActive(state);
     const bc = state.config.broadcast;
     const broadcast = bc && bc.text && (!bc.expiresAt || Date.now() < bc.expiresAt) ? bc.text : null;
@@ -301,14 +390,21 @@ async function route(req, res) {
     return sendJson(res, {
       meter: game.educationMeter(state), fights: state.fights.slice(0, 10), leaders, frozen: state.config.frozen,
       storm: { active: storm, until: storm ? state.config.stormUntil : 0, secsLeft: storm ? Math.max(0, Math.round((state.config.stormUntil - Date.now()) / 1000)) : 0 },
-      broadcast, floodgates: !!state.config.floodgates, spotlight
+      broadcast, floodgates: !!state.config.floodgates, spotlight,
+      pit: { tallies: state.pit || { bouts: 0, holds: 0, breaches: 0 }, holds: pitTop.holds, bounties: pitTop.bounties, hunters: pitTop.hunters },
+      founders: { claimed: (state.itemsSeq && state.itemsSeq.foundersember) || 0, cap: game.FOUNDER_CAP }
     });
   }
   if (method === 'GET' && p === '/api/me') {
+    const cls = game.classOf(me);
     return sendJson(res, {
       id: me.id, claimed: !!me.email, name: me.displayName, photo: me.photo,
       points: me.points, nodes: Object.keys(me.nodes || {}),
-      record: me.record, challengeToken: me.challengeToken
+      record: me.record, challengeToken: me.challengeToken,
+      xp: me.xp || 0, level: cls.level, className: cls.name, classIdx: cls.idx,
+      items: itemCounts(me), itemStock: me.itemStock || { mirrorwrap: [], anchorstitch: [] },
+      pitAttack: me.pitAttack || { bouts: 0, breaches: 0 },
+      devil: me.devil ? { held: me.devil.held, breached: me.devil.breached, bounty: game.bountyNow(me, Date.now()) } : null
     });
   }
   if (method === 'GET' && p === '/api/web') {
@@ -348,6 +444,18 @@ async function route(req, res) {
     return redirect(res, '/profile');
   }
 
+  // ---- the devil's taunt (owner-written, exact-text, light hygiene only)
+  if (method === 'POST' && p === '/api/profile/taunt') {
+    if (!me.email) return redirect(res, '/signup');
+    const f = await bodyForm(req);
+    const raw = String(f.taunt || '').replace(/[<>]/g, '').trim().slice(0, 90);
+    const PROFANE = ['fuck', 'shit', 'bitch', 'nigger', 'faggot', 'cunt', 'whore', 'rape'];
+    if (PROFANE.some(w => raw.toLowerCase().includes(w))) return redirect(res, '/profile?taunt=bad');
+    me.taunt = raw;
+    store.save(true);
+    return redirect(res, '/profile');
+  }
+
   // ---- profile settings
   if (method === 'POST' && p === '/api/profile/settings') {
     if (!me.email) return redirect(res, '/signup');
@@ -368,17 +476,93 @@ async function route(req, res) {
       if (!owner) return sendJson(res, { error: 'challenge not found' }, 404);
       mode = 'challenge';
     }
+    const seed = crypto.randomInt(1, 2147483647);
+    const storm = game.stormActive(state);
+    // Declared consumables that ride ANY fight (house or Pit): the Second
+    // Heart (breaks at the first zeroing blow) and the Stillbell (rung from
+    // the deck). Validated against the satchel here; spent per-branch below
+    // once the bout itself is admitted; unspent pieces return after settle.
+    const wantHeart = !!f.heart, wantBell = !!f.bell;
+    if (wantHeart && game.itemCount(me, 'secondheart') < 1) return sendJson(res, { error: 'item', message: 'You hold no Second Heart.' }, 400);
+    if (wantBell && game.itemCount(me, 'stillbell') < 1) return sendJson(res, { error: 'item', message: 'You hold no Stillbell.' }, 400);
+
+    // ---- THE PIT: a member challenges another member's devil -------------
+    if (f.pit) {
+      if (!me.email) return sendJson(res, { error: 'members-only', message: 'The Pit is members-only. Claim a profile to fight devils.' }, 403);
+      const devilOwner = ensurePlayer(state.players[String(f.pit)]);
+      if (!devilOwner || !devilOwner.email) return sendJson(res, { error: 'devil not found' }, 404);
+      if (devilOwner.id === me.id) return sendJson(res, { error: 'own devil', message: 'Your own devil will not fight you. It knows you too well.' }, 400);
+      const myClass = game.classOf(me), devilClass = game.classOf(devilOwner);
+      const classDelta = devilClass.idx - myClass.idx;
+      if (classDelta < 0) return sendJson(res, { error: 'class', message: `That devil is ${devilClass.name} — below your ${myClass.name} class. The Pit does not feed the small to the large.` }, 403);
+      if (classDelta > 1) return sendJson(res, { error: 'class', message: `That devil is ${devilClass.name} — two or more classes above your ${myClass.name}. Climb first.` }, 403);
+      // Anti-farm: attempts are consumed at the door, win, lose or void.
+      const akey = devilOwner.id + ':' + game.dayKey(Date.now());
+      me.pitAttempts = me.pitAttempts || {};
+      const used = me.pitAttempts[akey] || 0;
+      if (used >= game.PIT.attemptCap) return sendJson(res, { error: 'cap', message: `You have had your ${game.PIT.attemptCap} tries at this devil today. It needs its sleep too.` }, 429);
+      // Bonus items: declared at the door, validated against the satchel,
+      // spent on entry, refunded if the bout is voided.
+      const wantWrap = !!f.mirrorwrap;
+      const stitchTool = f.stitch && game.TOOL_IDS.includes(String(f.stitch)) ? String(f.stitch) : null;
+      const traits = game.devilTraits(devilOwner);
+      if (wantWrap && !traits.mirage) return sendJson(res, { error: 'item', message: 'The Mirror Wrap only speaks to a MIRAGE-marked devil.' }, 400);
+      if (wantWrap && game.itemCount(me, 'mirrorwrap') < 1) return sendJson(res, { error: 'item', message: 'You hold no Mirror Wrap.' }, 400);
+      if (stitchTool && !traits.armor) return sendJson(res, { error: 'item', message: 'An Anchor Stitch only matters against MORPH ARMOR.' }, 400);
+      if (stitchTool && game.itemCount(me, 'anchorstitch') < 1) return sendJson(res, { error: 'item', message: 'You hold no Anchor Stitch.' }, 400);
+      // Spend the actual numbered pieces; their serials ride the fight so a
+      // void can hand back the very same editions.
+      const spentSerials = { mirrorwrap: null, anchorstitch: null };
+      if (wantWrap) spentSerials.mirrorwrap = game.spendItem(me, 'mirrorwrap', devilOwner.displayName || 'a devil');
+      if (stitchTool) spentSerials.anchorstitch = game.spendItem(me, 'anchorstitch', devilOwner.displayName || 'a devil');
+      const gearSerials = { secondheart: null, stillbell: null };
+      if (wantHeart) gearSerials.secondheart = game.spendItem(me, 'secondheart', devilOwner.displayName || 'a devil');
+      if (wantBell) gearSerials.stillbell = game.spendItem(me, 'stillbell', devilOwner.displayName || 'a devil');
+      me.pitAttempts[akey] = used + 1;
+      // The devil's familiarity is its memory of challengers' shapes; its
+      // armor is its owner's grudge plating; its guard stretches scrambles.
+      const stats = game.effectiveStats(state, me, devilOwner.twinArmor || {}, {
+        famShapes: devilOwner.devilShapes || {},
+        morph: traits.armor, stitchTool
+      });
+      const built = game.makeDevilStrikes(seed, stats.roundMs, devilOwner, game.effectiveAggression(state), traits);
+      stats.combat.scrambleMs = Math.round(game.STRIKE.scrambleMs * (1 + built.style.guard));
+      const bounty = game.bountyNow(devilOwner, Date.now());
+      const fight = {
+        id: rid(10), playerId: me.id, mode: 'pit',
+        devilOwnerId: devilOwner.id, pitTraits: traits, pitClassDelta: classDelta,
+        pitBounty: bounty, pitItems: { mirrorwrap: wantWrap, stitch: stitchTool, serials: spentSerials },
+        heart: wantHeart, bell: wantBell, gearSerials,
+        stats, seed, strikes: built.strikes, postMorph: built.postMorph, startedAt: Date.now(),
+        storm, pointsMult: 1, floodgates: !!state.config.floodgates
+      };
+      activeFights.set(fight.id, fight);
+      store.save(true);
+      // The Mirror Wrap's reveal rides the RESPONSE only: feints are flagged
+      // for a wrapped challenger; the stored schedule keeps its secret.
+      const dealtStrikes = built.strikes.map(s => (wantWrap && s.kind === 'feint') ? { ...s, revealed: true } : s);
+      return sendJson(res, {
+        fightId: fight.id, stats, strikes: dealtStrikes, postMorph: built.postMorph, mode: 'pit',
+        ownerName: devilOwner.displayName || 'A fighter',
+        pit: { traits, bounty, classDelta, wrapped: wantWrap, stitch: stitchTool, devilClass: devilClass.name },
+        gear: { heart: wantHeart, bell: wantBell },
+        storm, floodgates: fight.floodgates
+      });
+    }
+
     const armorMap = mode === 'challenge' ? (owner.twinArmor || {}) : (me.twinArmor || {});
     const stats = game.effectiveStats(state, me, armorMap);
-    const seed = crypto.randomInt(1, 2147483647);
     // The weather is snapshotted at the door: storm aggression deals the
     // strike schedule, the points multiplier rides the fight into the
     // referee, and floodgates are already baked into the stats' trace costs.
-    const storm = game.stormActive(state);
     const strikes = game.makeStrikes(seed, stats.roundMs, game.effectiveAggression(state));
+    const gearSerials = { secondheart: null, stillbell: null };
+    if (wantHeart) gearSerials.secondheart = game.spendItem(me, 'secondheart', 'the house Twin');
+    if (wantBell) gearSerials.stillbell = game.spendItem(me, 'stillbell', 'the house Twin');
     const fight = {
       id: rid(10), playerId: me.id, mode,
       challengeOwnerId: owner ? owner.id : null,
+      heart: wantHeart, bell: wantBell, gearSerials,
       stats, seed, strikes, startedAt: Date.now(),
       storm, pointsMult: storm ? game.STORM.pointsMult : 1,
       floodgates: !!state.config.floodgates
@@ -386,6 +570,7 @@ async function route(req, res) {
     activeFights.set(fight.id, fight);
     return sendJson(res, {
       fightId: fight.id, stats, strikes, mode, ownerName: owner ? (owner.displayName || 'A fighter') : null,
+      gear: { heart: wantHeart, bell: wantBell },
       storm, floodgates: fight.floodgates
     });
   }
@@ -411,6 +596,16 @@ async function route(req, res) {
     }
     const problem = sim.problem || (resolved ? null : 'round ended without cause');
     if (problem) {
+      // A voided Pit bout refunds its declared items — the fight, honestly,
+      // never happened. (The daily attempt stays spent: the door was used.)
+      if (fight.mode === 'pit' && fight.pitItems && fight.pitItems.serials) {
+        game.refundItem(me, 'mirrorwrap', fight.pitItems.serials.mirrorwrap);
+        game.refundItem(me, 'anchorstitch', fight.pitItems.serials.anchorstitch);
+      }
+      if (fight.gearSerials) {
+        game.refundItem(me, 'secondheart', fight.gearSerials.secondheart);
+        game.refundItem(me, 'stillbell', fight.gearSerials.stillbell);
+      }
       // Honest void: the bout is remembered, but an implausible log teaches
       // nothing and earns nothing.
       me.record.bouts += 1;
@@ -429,16 +624,39 @@ async function route(req, res) {
     }
     // Only the actions up to the true end of the round teach the Twin.
     const settledActions = sim.outcome ? actions.filter(a => a && a.t <= sim.outcome.at + 250) : actions;
+    const fightStats = {
+      integrityLeft: sim.integrityLeft, tracePeak: sim.tracePeak,
+      parries: sim.parries, strikesTaken: sim.strikesTaken,
+      vulnBonus: sim.vulnBonus, damageDealt: sim.dmgTotal,
+      combos: sim.combos, abilitiesUsed: sim.abilitiesUsed,
+      parryWhiffs: sim.parryWhiffs, morphed: sim.morphed
+    };
+    // Declared gear settles honestly: a Heart that never broke and a Bell
+    // that never rang go back to the satchel — the very same editions.
+    if (fight.gearSerials) {
+      if (!sim.heartUsed) game.refundItem(me, 'secondheart', fight.gearSerials.secondheart);
+      if (!sim.bellRung) game.refundItem(me, 'stillbell', fight.gearSerials.stillbell);
+    }
+    if (fight.mode === 'pit') {
+      const devilOwner = ensurePlayer(state.players[fight.devilOwnerId]);
+      const verdict = game.settlePitFight(state, me, devilOwner, fight, {
+        actions: settledActions,
+        result: resolved.result, endReason: resolved.endReason,
+        durationMs: resolved.durationMs, fightStats
+      }, sim);
+      verdict.heartBroke = !!sim.heartUsed;
+      verdict.bellRung = !!sim.bellRung;
+      store.save(true);
+      return sendJson(res, { verdict });
+    }
     const verdict = game.settleFight(state, me, fight, {
       actions: settledActions,
       result: resolved.result, endReason: resolved.endReason,
       durationMs: resolved.durationMs, damagePct: sim.damagePct,
-      fightStats: {
-        integrityLeft: sim.integrityLeft, tracePeak: sim.tracePeak,
-        parries: sim.parries, strikesTaken: sim.strikesTaken,
-        vulnBonus: sim.vulnBonus, damageDealt: sim.dmgTotal
-      }
+      fightStats
     });
+    verdict.heartBroke = !!sim.heartUsed;
+    verdict.bellRung = !!sim.bellRung;
     store.save(true);
     return sendJson(res, { verdict });
   }
@@ -532,6 +750,9 @@ async function route(req, res) {
     owner.displayName = 'Steven Hall';
     owner.isOwner = true;
     state.deck.ownerPlayerId = owner.id;
+    // The owner fighter comes into being here if he did not exist: the
+    // Keeper's Set (one of every item, numbered + signed) is his by right.
+    game.grantKeeperSet(state, ensurePlayer(owner));
     store.save(true);
     return deckBack(res, ADMIN_KEY, 'notice=tied');
   }

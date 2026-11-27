@@ -28,6 +28,9 @@ function defaultState() {
     sessions: {},           // session token -> player id
     shapesGlobal: {},       // patternKey -> times taught (all fighters, ever)
     globalArmor: {},        // tool -> 0..0.2 shared hardening from the whole crowd
+    pit: { bouts: 0, holds: 0, breaches: 0 }, // THE PIT's own tallies — devils, not the house Twin
+    itemsSeq: { mirrorwrap: 0, anchorstitch: 0 }, // numbered-edition mint counters, per item type
+    keeperSetGranted: false, // the Keeper's master set is granted once, when the owner fighter exists
     fights: [],             // recent fight summaries, newest first (spectator rail), cap 60
     fightSeq: 0,
     verdicts: {}            // fightId -> verdict record (shareable cards)

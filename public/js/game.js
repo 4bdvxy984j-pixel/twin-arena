@@ -13,6 +13,10 @@
   var stageMsg = document.getElementById('stage-msg');
   var verdictEl = document.getElementById('verdict');
   var kitEl = document.getElementById('kit');
+  var abilitiesEl = document.getElementById('abilities');
+  var twinreadEl = document.getElementById('twinread');
+  var winframeEl = document.getElementById('winframe');
+  var winframeBar = document.getElementById('winframe-bar');
   var parryBtn = document.getElementById('parrybtn');
   var hpbar = document.getElementById('hpbar'), hptext = document.getElementById('hptext');
   var intbar = document.getElementById('intbar'), inttext = document.getElementById('inttext');
@@ -41,9 +45,20 @@
     if (SFX) SFX.unlock(); // inside the tap, synchronously — this is what wakes the audio
     startBtn.disabled = true;
     startBtn.textContent = 'THE GATE STIRS…';
+    var itemMirror = document.getElementById('item-mirror');
+    var itemStitch = document.getElementById('item-stitch');
+    var itemHeart = document.getElementById('item-heart');
+    var itemBell = document.getElementById('item-bell');
     fetch('/api/fight/start', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ challenge: window.TA_CHALLENGE || undefined })
+      body: JSON.stringify({
+        challenge: window.TA_CHALLENGE || undefined,
+        pit: window.TA_PIT || undefined,
+        mirrorwrap: !!(itemMirror && itemMirror.checked),
+        stitch: itemStitch && itemStitch.value ? itemStitch.value : undefined,
+        heart: !!(itemHeart && itemHeart.checked),
+        bell: !!(itemBell && itemBell.checked)
+      })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (!res.ok) {
@@ -69,18 +84,27 @@
       left: st.roundMs, startedAt: performance.now(), lastFrame: performance.now(),
       cds: {}, lastUse: {}, lockouts: {}, actions: [], dots: [],
       markUntil: 0, critNext: 0,
-      strikes: (d.strikes || []).map(function (s) { return { at: s.at, kind: s.kind, tool: s.tool, parried: false, eaten: false, done: false }; }),
+      strikes: (d.strikes || []).map(function (s) { return { at: s.at, kind: s.kind, tool: s.tool, revealed: !!s.revealed, parried: false, eaten: false, done: false }; }),
+      postMorph: (d.postMorph || []).map(function (s) { return { offset: s.offset, kind: s.kind, tool: s.tool, revealed: !!s.revealed, parried: false, eaten: false, done: false }; }),
+      morphed: false,
       vulnFrom: -1, vulnUntil: -1, parryCdUntil: 0,
       alarmStage: 0, crackStage: 0,
       shake: 0, flash: 0, eyeRage: 0, hurt: 0, over: false, endReason: null,
       particles: [], texts: [], phantomUntil: 0, beam: null, strikeFx: null,
-      famShown: {}, uses: {}
+      famShown: {}, uses: {},
+      // Phase 3 deck state — mirrors the referee exactly
+      abilityCds: {}, ghostCharges: 0, rapidUntil: 0, secondWindUsed: false,
+      lastProbeAt: -1e9, lastDecoyAt: -1e9, windowCalled: false,
+      heart: !!(d.gear && d.gear.heart), heartUsed: false,
+      bellDeclared: !!(d.gear && d.gear.bell), bellRung: false, bellUntil: 0
     };
     for (var id in st.tools) S.famShown[id] = st.tools[id].familiarity;
     stageMsg.classList.add('hidden');
     verdictEl.classList.add('hidden');
     parryBtn.disabled = false;
     buildKit(st);
+    buildAbilities(st);
+    updateTwinRead();
     clockEl.textContent = fmtClock(S.left);
     sfx('begin');
     if (SFX) SFX.humStart();
@@ -96,6 +120,7 @@
       b.style.setProperty('--tc', t.color);
       var traceTxt = t.trace > 0 ? '+' + t.trace + '% trace' : (t.trace < 0 ? t.trace + '% trace' : 'no trace');
       b.innerHTML = '<span class="tname" style="color:' + t.color + '">' + t.name + '</span>' +
+        '<span class="tdmg">DMG ' + t.dmg + (t.dot ? ' +' + t.dot + '/s burn' : '') + '</span>' +
         '<span class="tcost">' + t.cost + ' energy · ' + (t.cooldown / 1000).toFixed(1) + 's</span>' +
         '<span class="ttrace" style="color:' + (t.trace > 0 ? '#ff2a6d' : '#5dffa0') + '">' + traceTxt + '</span>' +
         '<span class="tfam">Twin familiarity <b data-fam>' + Math.round(t.familiarity * 100) + '%</b></span>' +
@@ -107,6 +132,122 @@
     });
   }
 
+  // ---------- the command deck: abilities, gear, the read ----------
+  // Trace gains pass through two honest filters, in the referee's order:
+  // GHOST eats the gain charge by charge; a rung STILLBELL freezes all rises.
+  function heardTrace(amt, now) {
+    if (amt > 0 && S.bellRung && now < S.bellUntil) return 0;
+    return amt;
+  }
+  function applyTrace(amt, now) {
+    S.trace = Math.max(0, Math.min(S.combat.traceMax, S.trace + amt));
+    if (S.trace >= 90 && S.alarmStage < 2) { S.alarmStage = 2; sfx('alarm2'); }
+    else if (S.trace >= 75 && S.alarmStage < 1) { S.alarmStage = 1; sfx('alarm'); }
+    if (S.trace >= S.combat.traceMax) { updateHud(); endFight('trace'); return true; }
+    return false;
+  }
+  function updateTwinRead() {
+    if (!twinreadEl || !S) return;
+    var best = null, bestN = 0;
+    for (var id in S.uses) if (S.uses[id] > bestN) { bestN = S.uses[id]; best = id; }
+    if (!best) { twinreadEl.textContent = 'THE TWIN READS YOU: nothing yet — it is watching your hands.'; return; }
+    var t = S.stats.tools[best];
+    var pct = Math.round((S.famShown[best] || 0) * 100);
+    var mood = pct < 35 ? 'still guessing at' : pct < 60 ? 'learning' : 'KNOWS';
+    twinreadEl.textContent = 'THE TWIN READS YOU: ' + t.name.toUpperCase() + ' is your tell — it is ' + mood +
+      ' that shape (' + pct + '% familiar).' + (pct >= 60 ? ' Change the shape or pay for it.' : '');
+  }
+  function buildAbilities(st) {
+    if (!abilitiesEl) return;
+    abilitiesEl.innerHTML = '';
+    var abs = st.abilities || {};
+    Object.keys(abs).forEach(function (id) {
+      var a = abs[id];
+      var b = document.createElement('button');
+      b.className = 'tool ability'; b.id = 'ability-' + id;
+      b.style.setProperty('--tc', a.color);
+      var detail = id === 'overdrive' ? 'DMG ' + a.dmg : id === 'secondwind' ? '+' + a.heal + ' integrity · once' :
+        id === 'ghost' ? 'next ' + (a.charges || 3) + ' strikes traceless' : 'cooldowns halved ' + ((a.windowMs || 8000) / 1000) + 's';
+      b.innerHTML = '<span class="tname" style="color:' + a.color + '">✦ ' + a.name + '</span>' +
+        '<span class="tdmg">' + detail + '</span>' +
+        '<span class="tcost">' + a.cost + ' energy · ' + (a.cooldown / 1000).toFixed(0) + 's cd</span>' +
+        '<span class="ttrace" style="color:' + (a.trace > 0 ? '#ff2a6d' : '#5dffa0') + '">' + (a.trace > 0 ? '+' + a.trace + '% trace' : 'no trace') + '</span>' +
+        '<span class="noenergy hidden">not enough energy</span>' +
+        '<span class="cdveil"></span>';
+      b.title = a.blurb;
+      b.addEventListener('click', function () { useAbility(id); });
+      abilitiesEl.appendChild(b);
+    });
+    if (S.bellDeclared) {
+      var bb = document.createElement('button');
+      bb.className = 'tool ability bell'; bb.id = 'ability-bell';
+      bb.style.setProperty('--tc', '#ffd166');
+      bb.innerHTML = '<span class="tname" style="color:#ffd166">🔔 RING THE STILLBELL</span>' +
+        '<span class="tdmg">trace frozen 12s — cooling still runs</span>' +
+        '<span class="tcost">declared gear · one ring</span>' +
+        '<span class="cdveil"></span>';
+      bb.title = 'Ring it when the trace climbs. The referee hears the same bell.';
+      bb.addEventListener('click', ringBell);
+      abilitiesEl.appendChild(bb);
+    }
+    if (S.heart) {
+      var hb = document.createElement('div');
+      hb.className = 'tool ability heartpod'; hb.id = 'ability-heart';
+      hb.innerHTML = '<span class="tname" style="color:#ff6b9d">💔 SECOND HEART — CARRIED</span>' +
+        '<span class="tdmg">breaks at the first zeroing blow · you stand at 40</span>';
+      abilitiesEl.appendChild(hb);
+    }
+  }
+  function useAbility(id) {
+    if (!S || S.over) return;
+    var now = elapsed();
+    var a = S.stats.abilities && S.stats.abilities[id];
+    if (!a) return;
+    if (S.abilityCds[id] && now < S.abilityCds[id]) return;
+    if (id === 'secondwind' && S.secondWindUsed) { sfx('deny'); return; }
+    if (S.energy < a.cost) { sfx('deny'); return; }
+    S.energy -= a.cost;
+    S.abilityCds[id] = now + a.cooldown;
+    S.actions.push({ t: Math.round(now), tool: 'ability:' + id });
+    if (applyTrace(heardTrace(a.trace || 0, now), now)) return;
+    if (id === 'ghost') {
+      S.ghostCharges = a.charges || 3;
+      floatText('GHOST — THE NEXT 3 STRIKES LEAVE NO TRACE', '#b967ff', true);
+      sfx('ghost');
+    } else if (id === 'secondwind') {
+      S.secondWindUsed = true;
+      S.integrity = Math.min(S.maxIntegrity, S.integrity + (a.heal || 30));
+      floatText('SECOND WIND +' + (a.heal || 30), '#5dffa0', true);
+      sfx('secondWind');
+    } else if (id === 'rapid') {
+      S.rapidUntil = now + (a.windowMs || 8000);
+      floatText('RAPID CYCLING — COOLDOWNS HALVED', '#00e5ff', true);
+      sfx('rapid');
+    } else if (id === 'overdrive') {
+      var dmg = (S.morphed && a.dmgMorph !== undefined) ? a.dmgMorph : a.dmg;
+      var crit = 1;
+      if (S.critNext > 0) { crit *= (1 + S.critNext); S.critNext = 0; S.phantomUntil = 0; }
+      if (now >= S.vulnFrom && now <= S.vulnUntil) { crit *= S.combat.vulnMult; floatText('VULNERABLE ×' + S.combat.vulnMult, '#fcee0a', true); }
+      S.beam = { until: performance.now() + 240, color: a.color };
+      hitFx(dmg * crit, a.color, 60);
+      S.shake = Math.min(18, S.shake + 12);
+      floatText('OVERDRIVE ' + Math.round(dmg * crit), '#ff2a6d', true);
+      sfx('overdrive');
+    }
+    updateKit();
+  }
+  function ringBell() {
+    if (!S || S.over || !S.bellDeclared || S.bellRung) return;
+    var now = elapsed();
+    S.bellRung = true;
+    S.bellUntil = now + 12000;
+    S.actions.push({ t: Math.round(now), tool: 'bell' });
+    floatText('THE STILLBELL RINGS — THE TRACE HOLDS ITS BREATH', '#ffd166', true);
+    sfx('bell');
+    var b = document.getElementById('ability-bell');
+    if (b) { b.disabled = true; b.classList.add('spent'); }
+  }
+
   // ---------- the Twin's side of the argument ----------
   function windingHaymaker(now) {
     for (var i = 0; i < S.strikes.length; i++) {
@@ -116,25 +257,47 @@
     }
     return null;
   }
+  // A parry answers a TELEGRAPH — a real wind-up or a Mirage feint alike.
+  // The referee accepts both (the feint eats the reflex); a parry with no
+  // telegraph of either kind would be a forgery, so the deck never logs one.
+  function windingTelegraph(now) {
+    for (var i = 0; i < S.strikes.length; i++) {
+      var s = S.strikes[i];
+      if ((s.kind === 'haymaker' || s.kind === 'feint') && !s.done && !s.parried && !s.eaten &&
+          now >= s.at - S.combat.windupMs && now <= s.at) return s;
+    }
+    return null;
+  }
   function tryParry() {
     if (!S || S.over) return;
     var now = elapsed();
     if (now < S.parryCdUntil) return;
-    var s = windingHaymaker(now);
+    var s = windingTelegraph(now);
     if (!s) { sfx('deny'); return; } // never log a parry the referee would call forged
     if (S.energy < S.combat.parryCost) { sfx('deny'); return; }
     S.energy -= S.combat.parryCost;
     S.parryCdUntil = now + S.combat.parryCooldown;
     s.parried = true;
     S.actions.push({ t: Math.round(now), tool: 'parry' });
-    floatText('PARRY READY — WAIT FOR IT…', '#fcee0a', false);
-    sfx('parryArm');
+    if (s.kind === 'feint') {
+      floatText(s.revealed ? 'YOU SAW THE LIE — AND PARRIED AIR ANYWAY' : 'PARRIED… AIR. IT WAS A MIRAGE.', '#b967ff', true);
+      sfx('whiff');
+    } else {
+      floatText('PARRY READY — WAIT FOR IT…', '#fcee0a', false);
+      sfx('parryArm');
+    }
   }
   parryBtn.addEventListener('click', tryParry);
 
   function resolveStrike(s, now) {
     s.done = true;
     var cb = S.combat;
+    if (s.kind === 'feint') {
+      // MIRAGE: the wind-up was a lie. Nothing lands — unless you spent a
+      // parry on it, in which case the phantom already ate your reflex.
+      if (!s.parried) floatText(s.revealed ? 'THE CRACKED ONE — NOTHING THERE' : 'A WIND-UP… THAT NEVER CAME', '#b967ff', false);
+      return;
+    }
     if (s.kind === 'haymaker') {
       if (s.parried) {
         S.vulnFrom = s.at; S.vulnUntil = s.at + cb.vulnMs;
@@ -169,7 +332,19 @@
     S.hurt = Math.min(1, S.hurt + (big ? 0.85 : 0.45));
     S.shake = Math.min(18, S.shake + (big ? 13 : 6));
     if (label) floatText(label, '#ff2a6d', true);
-    if (S.integrity <= 0) endFight('integrity');
+    if (S.integrity <= 0) {
+      // THE SECOND HEART: the first zeroing blow breaks it instead.
+      if (S.heart && !S.heartUsed) {
+        S.heartUsed = true;
+        S.integrity = 40;
+        floatText('💔 THE SECOND HEART BREAKS — YOU STAND AT 40', '#ff6b9d', true);
+        sfx('heart');
+        var hb = document.getElementById('ability-heart');
+        if (hb) hb.classList.add('spent');
+        return;
+      }
+      endFight('integrity');
+    }
   }
 
   // ---------- your side ----------
@@ -181,38 +356,52 @@
     if (S.lockouts[id] && now < S.lockouts[id]) return;
     if (S.energy < t.cost) { sfx('deny'); return; }
     S.energy -= t.cost;
-    S.cds[id] = now + t.cooldown;
+    // RAPID CYCLING: a use inside the window earns the halved cooldown —
+    // the same one the referee will hold you to.
+    S.cds[id] = now + (now <= S.rapidUntil ? t.cooldown * 0.5 : t.cooldown);
     S.lastUse[id] = now;
     S.actions.push({ t: Math.round(now), tool: id });
     S.uses[id] = (S.uses[id] || 0) + 1;
 
-    // The trace hears everything — and at 75% / 90% it says so, out loud.
-    S.trace = Math.max(0, Math.min(S.combat.traceMax, S.trace + t.trace));
-    if (t.trace > 0) floatText('+' + t.trace + '% TRACE', '#ff2a6d', false);
-    if (S.trace >= 90 && S.alarmStage < 2) { S.alarmStage = 2; sfx('alarm2'); }
-    else if (S.trace >= 75 && S.alarmStage < 1) { S.alarmStage = 1; sfx('alarm'); }
-    if (S.trace >= S.combat.traceMax) { updateHud(); endFight('trace'); return; }
+    // The trace hears everything — GHOST eats 3 strikes' worth, a rung
+    // STILLBELL freezes the rest. At 75% / 90% the trace says so, out loud.
+    var traceAdd = t.trace;
+    if (traceAdd > 0 && S.ghostCharges > 0) { traceAdd = 0; S.ghostCharges--; floatText('GHOST — NO TRACE', '#b967ff', false); }
+    traceAdd = heardTrace(traceAdd, now);
+    if (t.trace > 0 && traceAdd > 0) floatText('+' + traceAdd + '% TRACE', '#ff2a6d', false);
+    if (applyTrace(traceAdd, now)) return;
 
     // The Twin visibly learns: every repeat of a tool raises its shown familiarity.
     S.famShown[id] = Math.min(0.75, S.famShown[id] + 0.02);
     if (S.uses[id] === 3) floatText('IT HAS SEEN THIS SHAPE', '#ff2a6d', true);
     if (S.uses[id] === 6) floatText('IT KNOWS THIS ONE NOW', '#ff6b6b', true);
+    updateTwinRead();
 
     // A decoy burned into a wind-up eats the strike before it lands.
     if (id === 'decoy') {
+      S.lastDecoyAt = now;
       var s = windingHaymaker(now);
       if (s) { s.eaten = true; floatText('DECOY UP — IT SWINGS AT THE GHOST', '#fcee0a', false); }
     }
 
-    var dmg = t.dmg;
+    var dmg = (S.morphed && t.dmgMorph !== undefined) ? t.dmgMorph : t.dmg;
     var crit = 1;
     if (id !== 'decoy') {
       if (S.critNext > 0) { crit *= (1 + S.critNext); S.critNext = 0; S.phantomUntil = 0; }
-      if (S.markUntil > now && id !== 'probe') { crit *= 1.3; S.markUntil = 0; }
-      if (now >= S.vulnFrom && now <= S.vulnUntil) { crit *= S.combat.vulnMult; floatText('VULNERABLE ×' + S.combat.vulnMult, '#fcee0a', true); }
+      if (id === 'flood' && now - S.lastProbeAt <= 3000) {
+        // MARK & DROWN — the combo replaces the plain mark bonus.
+        crit *= 1.5; S.markUntil = 0;
+        floatText('MARK & DROWN ×1.5', '#ffd166', true); sfx('combo');
+      } else if (S.markUntil > now && id !== 'probe') { crit *= 1.3; S.markUntil = 0; }
+      if (now >= S.vulnFrom && now <= S.vulnUntil) {
+        crit *= S.combat.vulnMult;
+        floatText('VULNERABLE ×' + S.combat.vulnMult, '#fcee0a', true);
+        if (!S.windowCalled) { S.windowCalled = true; sfx('combo'); }
+      }
     }
     if (id === 'probe') {
       S.markUntil = now + 4000;
+      S.lastProbeAt = now;
       S.beam = { until: performance.now() + 140, color: t.color };
       hitFx(dmg * crit, t.color, 10);
       sfx('probe');
@@ -222,9 +411,15 @@
       S.shake = Math.min(16, S.shake + 9);
       sfx('flood');
     } else if (id === 'whisper') {
-      S.dots.push({ until: now + t.dotSecs * 1000, dps: t.dot });
+      var dps = (S.morphed && t.dotMorph !== undefined) ? t.dotMorph : t.dot;
+      S.dots.push({ until: now + t.dotSecs * 1000, dps: dps });
       hitFx(dmg * crit, t.color, 14);
       sfx('whisper');
+      // COLD TRAIL — a Whisper on a fresh Decoy's heels dumps trace.
+      if (now - S.lastDecoyAt <= 5000) {
+        S.trace = Math.max(0, S.trace - 12);
+        floatText('COLD TRAIL −12% TRACE', '#5dffa0', true); sfx('combo');
+      }
     } else if (id === 'decoy') {
       S.critNext = S.stats.decoyCrit;
       S.phantomUntil = now + 5000;
@@ -266,7 +461,7 @@
 
   canvas.addEventListener('pointerdown', function () {
     if (!S || S.over) return;
-    if (windingHaymaker(elapsed())) tryParry(); else useTool('probe');
+    if (windingTelegraph(elapsed())) tryParry(); else useTool('probe');
   });
   document.addEventListener('keydown', function (e) {
     if (!S || S.over) return;
@@ -294,11 +489,31 @@
       });
       if (S.hp <= 0) { endFight('breach'); }
       checkCrack();
+      // MORPH ARMOR: at half integrity the devil sheds its lessons and its
+      // rhythm re-seeds — the dealt post-morph offsets take over from here.
+      if (!S.over && !S.morphed && S.stats.morph && S.hp > 0 && S.hp <= S.maxHp * 0.5) {
+        S.morphed = true;
+        S.strikes = S.strikes.filter(function (x) { return x.done; });
+        S.postMorph.forEach(function (x) { x.at = now + x.offset; S.strikes.push(x); });
+        S.strikes.sort(function (a, b) { return a.at - b.at; });
+        for (var tid in S.stats.tools) {
+          var tt = S.stats.tools[tid];
+          if (tt.famMorph !== undefined) S.famShown[tid] = tt.famMorph;
+        }
+        floatText('⚠ THE ARMOR MORPHS — OLD LESSONS SHED', '#ff6b9d', true);
+        sfx('morph');
+        updateTwinRead();
+      }
       if (!S.over && !burning && S.hp > 0) S.hp = Math.min(S.stats.gateHp, S.hp + S.stats.gateRegen * dt);
       if (S.trace < 70 && S.alarmStage) S.alarmStage = 0; // cooled off — the alarm can speak again
-      // the haymaker's wind-up gets a voice the moment the telegraph opens
-      var windingNow = windingHaymaker(now);
-      if (windingNow && !windingNow.sndWindup) { windingNow.sndWindup = true; sfx('windup'); }
+      // a telegraph gets a voice the moment it opens — a REVEALED feint
+      // sounds cracked; an unrevealed one sounds exactly like the truth
+      var windingNow = windingTelegraph(now);
+      if (windingNow && !windingNow.sndWindup) {
+        windingNow.sndWindup = true;
+        if (windingNow.kind === 'feint' && windingNow.revealed) { sfx('feintReveal'); floatText('CRACKED GLASS — THAT WIND-UP IS A LIE', '#7df9ff', true); }
+        else sfx('windup');
+      }
       // the Twin's rhythm: strikes land on schedule whether you watch or not
       for (var i = 0; i < S.strikes.length && !S.over; i++) {
         var s = S.strikes[i];
@@ -325,8 +540,38 @@
     tracetext.classList.toggle('hot', S.trace > 75);
     clockEl.textContent = fmtClock(S.left);
     clockEl.classList.toggle('low', S.left < 20000);
-    var winding = !S.over && !!windingHaymaker(elapsed());
+    var nowH = elapsed();
+    var winding = !S.over && !!windingTelegraph(nowH);
     parryBtn.classList.toggle('armed', winding);
+    var charge = document.getElementById('parry-charge');
+    if (charge) {
+      var cdFrac = S.parryCdUntil > nowH ? 1 - (S.parryCdUntil - nowH) / S.combat.parryCooldown : 1;
+      charge.style.width = Math.round(Math.max(0, Math.min(1, cdFrac)) * 100) + '%';
+    }
+    // OPEN WINDOW: the gold frame counts down the vulnerability window.
+    if (winframeEl) {
+      var inWin = !S.over && nowH >= S.vulnFrom && nowH <= S.vulnUntil;
+      winframeEl.classList.toggle('hidden', !inWin);
+      if (inWin && winframeBar) {
+        var span = Math.max(1, S.vulnUntil - S.vulnFrom);
+        winframeBar.style.width = Math.round(Math.max(0, (S.vulnUntil - nowH) / span) * 100) + '%';
+      }
+    }
+    // Ability pods cool down on the same sweep as the tools.
+    if (abilitiesEl && S.stats.abilities) {
+      Object.keys(S.stats.abilities).forEach(function (id) {
+        var b = document.getElementById('ability-' + id);
+        if (!b) return;
+        var a = S.stats.abilities[id];
+        var cdLeft = S.abilityCds[id] ? Math.max(0, S.abilityCds[id] - nowH) : 0;
+        var spent = id === 'secondwind' && S.secondWindUsed;
+        b.disabled = cdLeft > 0 || spent || S.energy < a.cost;
+        b.classList.toggle('spent', !!spent);
+        b.querySelector('.cdveil').style.width = (cdLeft > 0 ? (cdLeft / a.cooldown * 100) : 0) + '%';
+        var ne = b.querySelector('.noenergy');
+        if (ne) ne.classList.toggle('hidden', S.energy >= a.cost);
+      });
+    }
   }
 
   function updateKit() {
@@ -373,7 +618,7 @@
     var frac = S.hp / S.maxHp;
     var t = nowPerf / 1000;
     var vuln = now >= S.vulnFrom && now <= S.vulnUntil;
-    var winding = windingHaymaker(now);
+    var winding = windingTelegraph(now);
 
     // phantom decoy gate
     if (now < S.phantomUntil) {
@@ -459,9 +704,10 @@
     var learned = (S.uses.probe || 0) + (S.uses.flood || 0) + (S.uses.whisper || 0);
     var narrow = Math.min(0.55, learned * 0.03);
     var windP = 0;
+    var windStrike = null;
     if (winding) {
-      var s = windingHaymaker(elapsed());
-      if (s) windP = 1 - Math.max(0, (s.at - elapsed()) / S.combat.windupMs);
+      var s = windingTelegraph(elapsed());
+      if (s) { windStrike = s; windP = 1 - Math.max(0, (s.at - elapsed()) / S.combat.windupMs); }
     }
     var R = (15 + Math.sin(t * 2.2) * 1.6 + S.eyeRage * 7) * (vuln ? 1.7 : 1) * (1 + windP * 0.5);
     // chrome aperture — a rotated square frame, glitching when struck
@@ -496,11 +742,14 @@
       ctx.beginPath(); ctx.ellipse(cx + xo, cy, R, R * (1 - narrow), 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
-    // wind-up warning ring, contracting onto the optic
+    // wind-up warning ring, contracting onto the optic — a REVEALED feint
+    // renders cracked (dashed ice-blue): the Mirror Wrap shows the lie
     if (winding) {
       ctx.save();
-      ctx.strokeStyle = '#fcee0a'; ctx.lineWidth = 3;
-      ctx.shadowColor = '#fcee0a'; ctx.shadowBlur = 16;
+      var cracked = windStrike && windStrike.kind === 'feint' && windStrike.revealed;
+      ctx.strokeStyle = cracked ? '#7df9ff' : '#fcee0a'; ctx.lineWidth = 3;
+      ctx.shadowColor = cracked ? '#7df9ff' : '#fcee0a'; ctx.shadowBlur = 16;
+      if (cracked) ctx.setLineDash([7, 6]);
       ctx.globalAlpha = 0.55 + 0.4 * Math.sin(t * 22);
       ctx.beginPath(); ctx.arc(cx, cy, 120 - windP * 62, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
@@ -571,13 +820,30 @@
       var shapes = v.shapesTaughtCount ? ('It learned ' + v.shapesTaughtCount + ' of your shapes.') : 'It already knew your tricks — no new shapes taught.';
       var fs = v.fightStats;
       var fsLine = fs ? ('<p class="v-name">Integrity left ' + fs.integrityLeft + ' · peak trace ' + fs.tracePeak + '% · ' + fs.parries + ' parried · ' + fs.strikesTaken + ' strikes taken</p>') : '';
+      var xpLine = v.xp ? ('<p class="v-name">+' + v.xp + ' XP' + (v.emberBonus ? ' (Founder\u2019s Ember +10%)' : '') + (v.levelUp ? ' — <strong>LEVEL UP</strong>' : '') + '</p>') : '';
+      var comboLine = fs && fs.combos && fs.combos.length ? ('<p class="v-name">Combos: ' + fs.combos.map(function (c) { return { 'mark-drown': 'MARK & DROWN', 'cold-trail': 'COLD TRAIL', 'open-window': 'OPEN WINDOW' }[c] || c; }).join(' · ') + '</p>') : '';
+      var pitLine = v.mode === 'pit' ? ('<p class="v-name">⚔ The Pit' + (v.bountyWon ? ' — bounty taken: <strong>' + v.bountyWon + ' pts</strong>' : '') + (v.feints ? ' · it showed ' + v.feints + ' Mirage phantom' + (v.feints === 1 ? '' : 's') : '') + (v.morphed ? ' · its armor <strong>morphed</strong> mid-fight' : '') + '</p>') : '';
+      var gearLine = (v.heartBroke ? '<p class="v-name">💔 Your Second Heart broke — and you stood back up.</p>' : '') + (v.bellRung ? '<p class="v-name">🔔 The Stillbell rang; the trace held its breath.</p>' : '');
+      var dropHtml = '';
+      (v.drops || []).forEach(function (dr) {
+        var names = { mirrorwrap: 'THE MIRROR WRAP', anchorstitch: 'ANCHOR STITCH', secondheart: 'THE SECOND HEART', stillbell: 'THE STILLBELL', foundersember: "THE FOUNDER'S EMBER" };
+        if (dr.rarity === 'LEGENDARY') {
+          dropHtml += '<p class="dropbanner legendary">★ LEGENDARY DROP — ' + (names[dr.item] || dr.item) + ' No. ' + dr.serial + ' · signed · the Keeper of the Arena</p>';
+          sfx('legendary');
+        } else {
+          dropHtml += '<p class="dropbanner ' + String(dr.rarity || 'rare').toLowerCase() + '">' + (dr.rarity || 'RARE') + ' DROP — ' + (names[dr.item] || dr.item) + ' No. ' + dr.serial + ' · signed · the Keeper of the Arena</p>';
+          sfx('drop');
+        }
+      });
+      var againHref = v.mode === 'pit' && v.devilOwnerId ? '/arena?pit=' + v.devilOwnerId : '/arena';
       html = '<div class="vcard-inner vcard ' + (v.result === 'win' ? 'win' : '') + '">' +
         '<h1 class="glitch">' + title + '</h1>' +
         '<p class="v-name">' + (voided ? 'That bout\u2019s log did not hold up — remembered, but it taught nothing and earned nothing. ' : '') + shapes + '</p>' + fsLine +
+        xpLine + comboLine + pitLine + gearLine + dropHtml +
         '<div class="v-stats"><div><strong>+' + v.points + '</strong><span>points</span></div>' +
         '<div><strong>' + Math.floor(v.secs / 60) + ':' + String(v.secs % 60).padStart(2, '0') + '</strong><span>time</span></div></div>' +
         '<div class="v-actions"><a class="fightbtn small" href="/verdict/' + v.id + '">Full verdict card</a>' +
-        '<a class="ghostbtn" href="/arena">Fight again</a>' +
+        '<a class="ghostbtn" href="' + againHref + '">Fight again</a>' +
         '<a class="ghostbtn" href="/web">Evolve</a>' +
         '<a class="ghostbtn" href="/signup">Claim a profile</a></div></div>';
     }

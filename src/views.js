@@ -1,5 +1,6 @@
 'use strict';
-const { TOOLS, TOOL_IDS, NODES, educationMeter, fmtTime, stormActive } = require('./game');
+const game = require('./game');
+const { TOOLS, TOOL_IDS, NODES, educationMeter, fmtTime, stormActive } = game;
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -18,7 +19,7 @@ function shell(title, body, me) {
 </head><body>
 <header class="topbar">
   <a class="brand" href="/"><span class="brandmark">◐</span> THE TWIN ARENA</a>
-  <nav><a href="/arena">Fight</a><a href="/web">Evolution</a>${who}<button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
+  <nav><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/web">Evolution</a>${who}<button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
 </header>
 <main>${body}</main>
 <footer class="foot">
@@ -95,8 +96,23 @@ function landing(state, me) {
   const board = leaders.map((p, i) => `
     <li><a href="/fighter/${p.id}">${p.photo ? `<img class="face" src="${esc(p.photo)}" alt="">` : '<span class="face ghost">◐</span>'}
     <span class="lname">${esc(p.displayName || 'Fighter')}</span>
-    <span class="lstat">${p.record.breaches} breaches · ${p.points} pts</span></a></li>`).join('')
+    <span class="lstat">Lv ${game.levelForXp(p.xp || 0)} · ${p.record.breaches} breaches · ${p.points} pts</span></a></li>`).join('')
     || '<li class="dim">No claimed fighters on the board yet. Be the first name it remembers.</li>';
+  const pit = state.pit || { bouts: 0, holds: 0, breaches: 0 };
+  const membersAll = Object.values(state.players).filter(x => x.email && x.devil);
+  const topHolds = membersAll.filter(x => x.devil.held > 0).sort((a, b) => b.devil.held - a.devil.held).slice(0, 5);
+  const topBounty = membersAll.slice().sort((a, b) => game.bountyNow(b, Date.now()) - game.bountyNow(a, Date.now())).slice(0, 5);
+  const topHunters = membersAll.filter(x => x.pitAttack && x.pitAttack.breaches > 0).sort((a, b) => b.pitAttack.breaches - a.pitAttack.breaches).slice(0, 5);
+  const pitBoards = `
+      <h2 class="mt">The Pit — devil boards</h2>
+      <p class="dim">${pit.bouts} pit bouts · ${pit.holds} holds · ${pit.breaches} devils breached. <a href="/pit">Walk the hall →</a></p>
+      <h3 class="boardh">Most holds</h3>
+      <ul class="board">${topHolds.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${p.devil.held} holds</span></a></li>`).join('') || '<li class="dim">No devil has held yet.</li>'}</ul>
+      <h3 class="boardh">Biggest bounties</h3>
+      <ul class="board">${topBounty.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${game.bountyNow(p, Date.now())} pts</span></a></li>`).join('') || '<li class="dim">No devils stand yet.</li>'}</ul>
+      <h3 class="boardh">Most breaches — the hunters</h3>
+      <ul class="board">${topHunters.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${p.pitAttack.breaches} devils breached</span></a></li>`).join('') || '<li class="dim">No hunter has drawn blood yet.</li>'}</ul>
+      <p class="dim founders-line">🔥 Founders' Embers: <strong>${(state.itemsSeq && state.itemsSeq.foundersember) || 0} of 100</strong> claimed${((state.itemsSeq && state.itemsSeq.foundersember) || 0) >= 100 ? ' — the mint is closed forever' : ' — granted to the first 100 claimed fighters, then never again'}.</p>`;
   const body = `
   <section class="hero">
     <div class="hero-gate" aria-hidden="true"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="eye"></div></div>
@@ -120,12 +136,15 @@ function landing(state, me) {
     <div class="panel">
       <h2>Leaderboard</h2>
       <ul class="board">${board}</ul>
+      ${pitBoards}
       <h2 class="mt">How it works</h2>
       <ol class="how">
         <li><strong>Fight.</strong> Four tools, one gate, two and a half minutes — and the gate fights back. It strikes on a rhythm: parry the haymaker when it winds up and the gate hangs open, vulnerable.</li>
         <li><strong>Mind the trace.</strong> Loud tools spike your trace; quiet play lets it cool. At 100% you are caught, mid-swing, whatever the gate looks like.</li>
         <li><strong>Teach.</strong> Your patterns are fingerprinted. Repeat them and they weaken — it has seen them.</li>
         <li><strong>Evolve.</strong> Spend mutation points down the web so your next fight hits different.</li>
+        <li><strong>Level up.</strong> Fighting earns XP; levels raise your weight class — Spark, Ember, Flare, Blaze, Inferno. XP is a track, never a currency: it cannot be spent or bought.</li>
+        <li><strong>The Pit.</strong> Every member's Twin stands as a devil in <a href="/pit">the Pit</a>. Fight other fighters' devils — they play their owners' way, and yours defends while you sleep. High-class devils carry the Mirage, and the top class wears Morph Armor. Bounties grow on the unbeaten.</li>
         <li><strong>Challenge.</strong> Send your Twin — the one hardened against <em>you</em> — to fight your friends.</li>
       </ol>
     </div>
@@ -133,12 +152,56 @@ function landing(state, me) {
   return shell('The Arena Door', body, me);
 }
 
-function arenaPage(state, me, challenge) {
+function traitBadges(traits) {
+  const out = [];
+  if (traits && traits.mirage) out.push('<span class="badge mirage">MIRAGE-marked</span>');
+  if (traits && traits.armor) out.push('<span class="badge armor">ARMORED — Morph Armor</span>');
+  return out.join(' ');
+}
+
+function arenaPage(state, me, challenge, pit) {
   if (state.config.frozen) return shell('Frozen', maintenanceCard(), me);
   const ch = challenge ? `<div class="challenge-banner">You are fighting <strong>${esc(challenge.ownerName)}</strong>'s Twin — hardened by every lesson its owner taught it. The result will be delivered to their grudge page.</div>` : '';
+  let pitBanner = '', itemPanel = '';
+  if (pit) {
+    pitBanner = `<div class="challenge-banner pit-banner">⚔ <strong>THE PIT</strong> — you face <strong>${esc(pit.ownerName)}</strong>'s devil: a ${esc(pit.traits.className)}-class Twin that fights its owner's way. Bounty on its head: <strong>${pit.bounty} pts</strong>. ${traitBadges(pit.traits)}<br><span class="dim">Asynchronous play: the devil is server-driven by its owner's build and habits — its owner is not at the keys, and may be asleep. That is the design, stated plainly.</span></div>`;
+    const bits = [];
+    if (pit.traits.mirage) {
+      if ((pit.myItems.mirrorwrap || 0) > 0) {
+        const serials = (pit.myStock.mirrorwrap || []).map(n => 'No. ' + n).join(', ');
+        bits.push(`<label class="check itemopt legendary"><input type="checkbox" id="item-mirror"> 🪞 Use <strong>THE MIRROR WRAP</strong> <span class="rarity legendary">LEGENDARY</span> — yours: ${esc(serials)} · ${esc(game.KEEPER_SIGNATURE)}. One wrap, one fight: its false wind-ups crack and show.</label>`);
+      } else {
+        bits.push(`<p class="dim">🪞 You hold no <strong>Mirror Wrap</strong> <span class="rarity legendary">LEGENDARY</span> — the Mirage will lie to you freely. Wraps are earned by breaching Mirage devils, rarely.</p>`);
+      }
+    }
+    if (pit.traits.armor) {
+      if ((pit.myItems.anchorstitch || 0) > 0) {
+        const serials = (pit.myStock.anchorstitch || []).map(n => 'No. ' + n).join(', ');
+        bits.push(`<label class="itemopt rare">🧵 <strong>ANCHOR STITCH</strong> <span class="rarity rare">RARE</span> — yours: ${esc(serials)} · ${esc(game.KEEPER_SIGNATURE)}. Stitch one tool so the morph cannot shed it:
+          <select id="item-stitch"><option value="">— no stitch —</option>${TOOL_IDS.map(t => `<option value="${t}">${TOOLS[t].name}</option>`).join('')}</select></label>`);
+      } else {
+        bits.push(`<p class="dim">🧵 You hold no <strong>Anchor Stitch</strong> <span class="rarity rare">RARE</span> — when this devil's armor morphs at half integrity, it sheds what it knows of you. Stitches are earned by breaching Armored devils.</p>`);
+      }
+    }
+    if (bits.length) itemPanel = `<div class="itempanel"><h3>Satchel — declared before the fight, spent on entry</h3>${bits.join('')}</div>`;
+  }
+  // Gear that rides ANY fight (Second Heart / Stillbell), from your satchel.
+  let gearPanel = '';
+  if (me) {
+    const stock = me.itemStock || {};
+    const gbits = [];
+    if ((stock.secondheart || []).length) {
+      gbits.push(`<label class="check itemopt epic"><input type="checkbox" id="item-heart"> 💔 Carry <strong>THE SECOND HEART</strong> <span class="rarity epic">EPIC</span> — yours: ${stock.secondheart.map(n => 'No. ' + n).join(', ')} · ${esc(game.KEEPER_SIGNATURE)}. If a blow would zero you, it breaks instead and you stand at 40. Unbroken, it returns.</label>`);
+    }
+    if ((stock.stillbell || []).length) {
+      gbits.push(`<label class="check itemopt epic"><input type="checkbox" id="item-bell"> 🔔 Carry <strong>THE STILLBELL</strong> <span class="rarity epic">EPIC</span> — yours: ${stock.stillbell.map(n => 'No. ' + n).join(', ')} · ${esc(game.KEEPER_SIGNATURE)}. A button joins your deck: ring it and the trace cannot rise for 12 seconds. Unrung, it returns.</label>`);
+    }
+    if (gbits.length) gearPanel = `<div class="itempanel gearpanel"><h3>Gear — declared before the fight</h3>${gbits.join('')}</div>`;
+  }
   const body = `
   <section class="arena-wrap">
     ${ch}
+    ${pitBanner}
     ${bannersHtml(state)}
     <div class="hud">
       <div class="hudcell"><label>GATE</label><div class="bar hp"><i id="hpbar"></i></div><span id="hptext">100</span></div>
@@ -149,23 +212,114 @@ function arenaPage(state, me, challenge) {
     </div>
     <div class="stage">
       <canvas id="gate" width="900" height="560"></canvas>
+      <div id="winframe" class="winframe hidden"><span id="winframe-label">OPEN WINDOW ×2</span><i id="winframe-bar"></i></div>
       <div id="stage-msg" class="stage-msg">
-        <h2>${challenge ? 'Your challenger\u2019s Twin is waiting.' : 'The Twin is waiting.'}</h2>
-        <p>Four tools. One gate. It learns every shape you show it — and it throws back. Parry the wind-up. Mind your trace.</p>
+        <h2>${pit ? `${esc(pit.ownerName)}'s devil is waiting.` : (challenge ? 'Your challenger\u2019s Twin is waiting.' : 'The Twin is waiting.')}</h2>
+        <p>Your command deck is below: four tool pods, your evolution abilities, one big parry plate. It learns every shape you show it — and it throws back. Parry the wind-up. Mind your trace.</p>
+        ${itemPanel}
+        ${gearPanel}
         <button id="startbtn" class="fightbtn">BEGIN THE BREACH</button>
       </div>
       <div id="verdict" class="verdict hidden"></div>
     </div>
-    <button id="parrybtn" class="parrybtn" type="button" disabled>⚡ PARRY<span>tap when it winds up — or tap the optic, or hit SPACE</span></button>
+    <div id="twinread" class="twinread">The Twin is reading you…</div>
+    <button id="parrybtn" class="parrybtn" type="button" disabled><span class="parry-charge" id="parry-charge"></span>⚡ PARRY<span>tap when it winds up — or tap the optic, or hit SPACE</span></button>
     <div class="kit" id="kit"></div>
+    <div class="kit abilities" id="abilities"></div>
+    <div class="combos-legend">
+      <span><strong>MARK &amp; DROWN</strong> — Probe, then Flood within 3s: +50%</span>
+      <span><strong>COLD TRAIL</strong> — Whisper on a fresh Decoy: dumps trace</span>
+      <span><strong>OPEN WINDOW</strong> — strike inside the gold frame after a parry: ×2</span>
+    </div>
     <div class="arena-foot">
       <span id="fam-note">Familiarity is how well the Twin knows a tool — the higher it climbs, the weaker the tool lands. Trace is how loud you are — at 100%, you are caught.</span>
       <button id="mutebtn" class="ghostbtn" type="button">Sound: on</button>
     </div>
   </section>
-  <script>window.TA_CHALLENGE = ${challenge ? JSON.stringify(challenge.token) : 'null'};</script>
+  <script>window.TA_CHALLENGE = ${challenge ? JSON.stringify(challenge.token) : 'null'}; window.TA_PIT = ${pit ? JSON.stringify(pit.ownerId) : 'null'};</script>
   <script src="/js/game.js"></script>`;
   return shell('The Arena', body, me);
+}
+
+// ---- THE PIT -----------------------------------------------------------------
+// One devil's card: the same card stands in the hall, on the fighter's page,
+// and (as "your devil") on the owner's own profile.
+function devilCardHtml(state, owner, me, opts) {
+  opts = opts || {};
+  const traits = game.devilTraits(owner);
+  const devil = owner.devil || { held: 0, breached: 0, bounty: game.PIT.bountyBase, lastBreachedBy: null };
+  const bounty = game.bountyNow(owner, Date.now());
+  const shapesKnown = Object.keys(owner.devilShapes || {}).length;
+  const nodesOwned = Object.keys(owner.nodes || {}).length;
+  const armorTools = TOOL_IDS.map(t => ({ t, v: (owner.twinArmor || {})[t] || 0 })).sort((a, b) => b.v - a.v);
+  const armorLine = armorTools[0] && armorTools[0].v > 0
+    ? `Hardened most against ${TOOLS[armorTools[0].t].name} (${Math.round(armorTools[0].v * 100)}%)`
+    : 'No grudge armor yet — an unscarred devil';
+  const mine = me && me.id === owner.id;
+  let gate = '';
+  if (opts.hall) {
+    if (mine) gate = '<span class="dim">Your own devil. It will not fight you.</span>';
+    else if (!me || !me.email) gate = '<span class="dim">Members only — <a href="/signup">claim a profile</a> to fight devils.</span>';
+    else {
+      const myClass = game.classOf(me);
+      const delta = traits.classIdx - myClass.idx;
+      if (delta < 0) gate = `<span class="dim">Below your ${myClass.name} class — the Pit does not feed the small to the large.</span>`;
+      else if (delta > 1) gate = `<span class="dim">${traits.className} — too far above your ${myClass.name}. Climb first.</span>`;
+      else gate = `<a class="fightbtn small" href="/arena?pit=${owner.id}">⚔ FIGHT THIS DEVIL</a>`;
+    }
+  }
+  return `<article class="pitcard ${traits.armor ? 'is-armor' : ''} ${traits.mirage ? 'is-mirage' : ''}">
+    <div class="pit-head">
+      ${owner.photo ? `<img class="p-face small" src="${esc(owner.photo)}" alt="">` : '<div class="p-face ghost small">◐</div>'}
+      <div class="pit-title">
+        <h3><a href="/fighter/${owner.id}">${esc(owner.displayName || 'Fighter')}</a>'s devil</h3>
+        <p class="dim">Lv ${traits.level} · <span class="classchip c${traits.classIdx}">${esc(traits.className)} class</span> ${traitBadges(traits)}</p>
+      </div>
+      <div class="pit-bounty"><strong>${bounty}</strong><span>bounty pts</span></div>
+    </div>
+    ${owner.taunt ? `<p class="taunt">“${esc(owner.taunt)}”</p>` : ''}
+    ${game.founderSerial(owner) ? `<p class="embermark">🔥 Founder's Ember No. ${game.founderSerial(owner)} — one of the first hundred. Its holder earns +10% XP; the mark is the honor.</p>` : ''}
+    <p class="pit-stats">Held <strong>${devil.held}</strong> · breached <strong>${devil.breached}</strong>${devil.lastBreachedBy ? ` · last breached by ${esc(devil.lastBreachedBy)}` : ''}<br>
+    <span class="dim">Knows ${shapesKnown} challenger shapes · owner's web: ${nodesOwned} evolutions · ${esc(armorLine)}</span></p>
+    <div class="pit-gate">${gate}</div>
+  </article>`;
+}
+
+function pitPage(state, me, sort) {
+  if (state.config.frozen) return shell('Frozen', maintenanceCard(), me);
+  const members = Object.values(state.players).filter(p => p.email && p.devil);
+  const now = Date.now();
+  const sorted = members.slice();
+  if (sort === 'record') sorted.sort((a, b) => (b.devil.held - a.devil.held) || (game.bountyNow(b, now) - game.bountyNow(a, now)));
+  else if (sort === 'grudge' && me) {
+    const grudges = new Set(me.devil && me.devil.breachedBy ? me.devil.breachedBy : []);
+    sorted.sort((a, b) => ((grudges.has(b.id) ? 1 : 0) - (grudges.has(a.id) ? 1 : 0)) || (game.bountyNow(b, now) - game.bountyNow(a, now)));
+  } else sorted.sort((a, b) => game.bountyNow(b, now) - game.bountyNow(a, now));
+  const myClass = me && me.email ? game.classOf(me) : null;
+  const cards = sorted.map(p => devilCardHtml(state, p, me, { hall: true })).join('')
+    || '<p class="dim">No devils stand yet. The first claimed profile raises the first devil.</p>';
+  const pit = state.pit || { bouts: 0, holds: 0, breaches: 0 };
+  const body = `
+  <section class="pitwrap">
+    <h1>The Pit</h1>
+    <p class="lede small">Every member's Twin stands here as a devil — fighting its owner's way, learning from everyone who comes for it.
+    Yours defends while you sleep; results land on your grudge feed. <strong>Asynchronous by design:</strong> you fight their devil live; no devil is its owner at the keys.
+    ${myClass ? `You stand in the <strong>${esc(myClass.name)}</strong> class (Lv ${myClass.level}) — you may fight your class or one above it.` : 'Guests may walk the hall; fighting is members-only.'}</p>
+    <p class="dim">${pit.bouts} pit bouts fought · ${pit.holds} holds · ${pit.breaches} breaches. Bounties are minted by the house and grow +${game.PIT.bountyPerDay}/day and +${game.PIT.bountyPerHold} per hold on the unbeaten, up to ${game.PIT.bountyMax}.</p>
+    <p class="dim founders-line">🔥 Founders' Embers: <strong>${(state.itemsSeq && state.itemsSeq.foundersember) || 0} of 100</strong> claimed — granted to the first 100 claimed fighters, then never minted again.</p>
+    <p class="sortlinks">Sort: <a href="/pit?sort=bounty">biggest bounty</a> · <a href="/pit?sort=record">best record</a> · <a href="/pit?sort=grudge">my grudges first</a></p>
+    <div class="pitgrid">${cards}</div>
+    <div class="panel mt">
+      <h2>The flavors of trouble</h2>
+      <p><span class="badge mirage">MIRAGE-marked</span> — from the Flare class up, a devil lies: some wind-ups are phantoms, and a parry thrown at one bites air. <strong>${esc(game.ITEMS.mirrorwrap.name)}</strong> <span class="rarity legendary">LEGENDARY</span> — ${esc(game.ITEMS.mirrorwrap.line)}</p>
+      <p><span class="badge armor">ARMORED</span> — Inferno-class devils wear Morph Armor: at half integrity it morphs once, shedding most of what it knew of your tools and changing its rhythm mid-fight. <strong>${esc(game.ITEMS.anchorstitch.name)}</strong> <span class="rarity rare">RARE</span> — ${esc(game.ITEMS.anchorstitch.line)}</p>
+      <p><strong>${esc(game.ITEMS.secondheart.name)}</strong> <span class="rarity epic">EPIC</span> — ${esc(game.ITEMS.secondheart.line)} Earned only off Armored devils, or by a devil that holds five times running for its sleeping owner.</p>
+      <p><strong>${esc(game.ITEMS.stillbell.name)}</strong> <span class="rarity epic">EPIC</span> — ${esc(game.ITEMS.stillbell.line)} Earned only off high-class Mirage devils.</p>
+      <p><strong>${esc(game.ITEMS.foundersember.name)}</strong> <span class="rarity founder">FOUNDER</span> — ${esc(game.ITEMS.foundersember.line)}</p>
+      <p class="dim">Items are earned only — breaching trait devils drops them (the Wrap rarely; it is a legendary thing), and a devil's hold occasionally earns its owner the matching piece. They are numbered editions, ${esc(game.KEEPER_SIGNATURE)}. Never sold, never bought.</p>
+    </div>
+  </section>`;
+  return shell('The Pit', body, me);
 }
 
 function authPage(state, me, kind, error) {
@@ -188,9 +342,21 @@ function authPage(state, me, kind, error) {
 
 function pct(x) { return Math.round((x || 0) * 100) + '%'; }
 
-function profilePage(state, p) {
+function itemLine(itemId, serial, extra) {
+  const it = game.ITEMS[itemId];
+  const rar = `<span class="rarity ${it.rarity.toLowerCase()}">${it.rarity}</span>`;
+  return `<li class="itemline ${it.rarity.toLowerCase()}"><strong>${esc(it.name)} No. ${serial}</strong> ${rar} · ${esc(game.KEEPER_SIGNATURE)}${extra || ''}</li>`;
+}
+
+function profilePage(state, p, opts) {
+  opts = opts || {};
   const rec = p.record;
   const winRate = rec.bouts ? Math.round(rec.breaches / rec.bouts * 100) : 0;
+  const cls = game.classOf(p);
+  const xpNow = p.xp || 0;
+  const xpNext = game.xpForLevel(cls.level + 1);
+  const xpFloor = game.xpForLevel(cls.level);
+  const xpPct = xpNext > xpFloor ? Math.min(100, Math.round((xpNow - xpFloor) / (xpNext - xpFloor) * 100)) : 100;
   const curr = Object.entries(p.shapes || {}).sort((a, b) => b[1] - a[1]).slice(0, 24);
   const currRows = curr.map(([k, v]) => {
     const g = state.shapesGlobal[k] || 0;
@@ -199,10 +365,24 @@ function profilePage(state, p) {
   }).join('') || '<tr><td colspan="3" class="dim">No shapes taught yet. Your first fight writes the first line.</td></tr>';
   const armorRows = TOOL_IDS.map(t => `
     <div class="armor-row"><span>${TOOLS[t].name}</span><div class="mini-bar armor"><i style="width:${pct(p.twinArmor[t])}"></i></div><span>${pct(p.twinArmor[t])} hardened</span></div>`).join('');
-  const feed = (p.challengeFeed || []).map(f => `
-    <li><strong>${esc(f.challenger)}</strong> challenged your Twin and ${f.result === 'win' ? '<span class="bad">breached it</span>' : 'was turned back'} · ${fmtTime(f.secs)} · <a href="/verdict/${esc(f.verdictId)}">verdict</a></li>`).join('')
+  const feed = (p.challengeFeed || []).map(f => {
+    if (f.mode === 'pit') {
+      return f.result === 'win'
+        ? `<li>⚔ <strong>${esc(f.challenger)}</strong> breached your devil in the Pit and took its <strong>${f.bounty || 0} pt</strong> bounty${f.shape ? ` — the shape that did it: <code>${esc(f.shape)}</code>, and your devil has learned it` : ''} · ${fmtTime(f.secs)} · <a href="/verdict/${esc(f.verdictId)}">verdict</a></li>`
+        : `<li>⚔ <strong>${esc(f.challenger)}</strong> came for your devil in the Pit and <strong>was held</strong> · ${fmtTime(f.secs)} · <a href="/verdict/${esc(f.verdictId)}">verdict</a></li>`;
+    }
+    return `<li><strong>${esc(f.challenger)}</strong> challenged your Twin and ${f.result === 'win' ? '<span class="bad">breached it</span>' : 'was turned back'} · ${fmtTime(f.secs)} · <a href="/verdict/${esc(f.verdictId)}">verdict</a></li>`;
+  }).join('')
     || '<li class="dim">Nobody has challenged your Twin yet. Send the link and wait.</li>';
   const ownedCount = Object.keys(p.nodes || {}).length;
+  const stock = p.itemStock || { mirrorwrap: [], anchorstitch: [] };
+  const heldItems = Object.keys(game.ITEMS).flatMap(itemId => (stock[itemId] || []).map(serial => itemLine(itemId, serial)));
+  const spentItems = (p.itemHistory || []).filter(h => h.spent).slice(0, 12).map(h =>
+    itemLine(h.item, h.serial, ` — <span class="dim">spent${h.spentVs ? ' against ' + esc(h.spentVs) + "'s devil" : ''} · the number stays yours in the record</span>`));
+  const inventory = `
+        <h2 class="mt">Your satchel — numbered editions</h2>
+        ${heldItems.length ? `<ul class="items">${heldItems.join('')}</ul>` : '<p class="dim">Empty. Pit wins drop the pieces — the Mirror Wrap rarely; it is a legendary thing.</p>'}
+        ${spentItems.length ? `<h3 class="boardh">Collection record — spent</h3><ul class="items spent">${spentItems.join('')}</ul>` : ''}`;
   const body = `
   <section class="profile">
     <div class="p-head">
@@ -211,6 +391,8 @@ function profilePage(state, p) {
         <h1>${esc(p.displayName || 'Fighter')}</h1>
         <p class="dim">${rec.bouts} bouts · ${rec.breaches} breaches · ${winRate}% breach rate · streak ${rec.streak > 0 ? '+' + rec.streak : rec.streak}${rec.bestSecs ? ` · best breach ${fmtTime(rec.bestSecs)}` : ''}</p>
         <p><strong>${p.points}</strong> mutation points · <strong>${ownedCount}</strong> evolutions · <a href="/web">open the web</a></p>
+        <p class="level-line"><strong>Level ${cls.level}</strong> · <span class="classchip c${cls.idx}">${esc(cls.name)} class</span> · ${xpNow} XP
+          <span class="xpbar"><i style="width:${xpPct}%"></i></span> <span class="dim">${xpNext - xpNow} XP to level ${cls.level + 1} · XP is a track, never a currency</span></p>
       </div>
     </div>
     <div class="cols">
@@ -231,9 +413,19 @@ function profilePage(state, p) {
           <label class="check"><input type="checkbox" name="publicProfile" ${p.publicProfile !== false ? 'checked' : ''}> Show me on the public leaderboard</label>
           <button type="submit">Save</button>
         </form>
+        ${inventory}
       </div>
       <div class="panel">
-        <h2>Your curriculum — what you taught it</h2>
+        <h2>Your devil — standing in <a href="/pit">the Pit</a></h2>
+        ${devilCardHtml(state, p, p, {})}
+        <form method="post" action="/api/profile/taunt" class="authform slim">
+          <label>Your devil's taunt — one line, yours, shown on its card
+            <input name="taunt" value="${esc(p.taunt || '')}" maxlength="90" placeholder="It learned from the best. You are not the best."></label>
+          ${opts.tauntError ? '<p class="err">That line was refused — keep it clean and it stands as written.</p>' : ''}
+          <button type="submit">Set the taunt</button>
+        </form>
+        <p class="dim">Your Pit record as a hunter: ${(p.pitAttack || {}).bouts || 0} bouts · ${(p.pitAttack || {}).breaches || 0} devils breached.</p>
+        <h2 class="mt">Your curriculum — what you taught it</h2>
         <table class="curr"><thead><tr><th>Shape</th><th>Times taught</th><th>How known it is</th></tr></thead><tbody>${currRows}</tbody></table>
         <h2 class="mt">The grudge — your Twin, hardened against you</h2>
         ${armorRows}
@@ -245,17 +437,20 @@ function profilePage(state, p) {
   return shell('Your Profile', body, p);
 }
 
-function fighterPage(state, p) {
+function fighterPage(state, p, me) {
   const rec = p.record;
   const taught = Object.keys(p.shapes || {}).length;
+  const cls = game.classOf(p);
   const body = `
   <section class="profile">
     <div class="p-head">
       ${p.photo ? `<img class="p-face" src="${esc(p.photo)}" alt="">` : '<div class="p-face ghost">◐</div>'}
       <div><h1>${esc(p.displayName || 'Fighter')}</h1>
-      <p class="dim">${rec.bouts} bouts · ${rec.breaches} breaches${rec.bestSecs ? ` · best breach ${fmtTime(rec.bestSecs)}` : ''} · has taught the Twin ${taught} shapes</p>
+      <p class="dim">Level ${cls.level} · ${esc(cls.name)} class · ${rec.bouts} bouts · ${rec.breaches} breaches${rec.bestSecs ? ` · best breach ${fmtTime(rec.bestSecs)}` : ''} · has taught the Twin ${taught} shapes</p>
       <p><a class="fightbtn small" href="/challenge/${esc(p.challengeToken)}">⚔ Fight ${esc(p.displayName || 'their')} Twin</a></p></div>
     </div>
+    <h2 class="mt">Their devil — standing in <a href="/pit">the Pit</a></h2>
+    ${devilCardHtml(state, p, me || null, { hall: true })}
     <p class="dim">A fighter's full curriculum is their own to see. What the world gets is the aggregate — and the Twin itself.</p>
   </section>`;
   return shell(p.displayName || 'Fighter', body, null);
@@ -303,6 +498,17 @@ function verdictPage(state, v, me) {
   const armor = Object.entries(v.armorGains || {}).map(([t, g]) => `${TOOLS[t] ? TOOLS[t].name : t} +${Math.round(g * 100)}%`).join(' · ');
   const mine = me && me.id === v.fighterId;
   const fs = v.fightStats;
+  const xpLine = v.xp ? `<p class="v-xp">+${v.xp} XP${v.emberBonus ? ' (Founder\u2019s Ember +10%)' : ''}${v.level ? ` · Level ${v.level}` : ''}${v.levelUp ? ' — <strong>LEVEL UP</strong>' : ''}</p>` : '';
+  const comboLine = fs && fs.combos && fs.combos.length
+    ? `<p class="v-combos">Combos landed: ${fs.combos.map(c => ({ 'mark-drown': 'MARK & DROWN', 'cold-trail': 'COLD TRAIL', 'open-window': 'OPEN WINDOW' }[c] || c)).join(' · ')}</p>` : '';
+  const pitLine = v.mode === 'pit' ? `<p class="v-pit">⚔ A Pit fight against <strong>${esc(v.devilName || 'a fighter')}</strong>'s devil.${v.result === 'win' ? ` Bounty taken: <strong>${v.bountyWon || 0} pts</strong>.` : ''}${v.feints ? ` It showed ${esc(v.feints)} Mirage phantom${v.feints === 1 ? '' : 's'}.` : ''}${v.morphed ? ' Its armor <strong>morphed</strong> mid-fight — old lessons shed, rhythm changed.' : ''}</p>` : '';
+  const dropLines = (v.drops || []).map(d => {
+    const it = game.ITEMS[d.item];
+    if (!it) return '';
+    const mark = { LEGENDARY: '★', EPIC: '✦', RARE: '◆', FOUNDER: '🔥' }[it.rarity] || '◆';
+    return `<p class="dropbanner ${it.rarity.toLowerCase()}">${mark} ${it.rarity} DROP — <strong>${esc(it.name)} No. ${d.serial}</strong> · ${esc(game.KEEPER_SIGNATURE)}</p>`;
+  }).join('');
+  const gearLines = `${v.heartBroke ? '<p class="v-gear">💔 <strong>Your Second Heart broke</strong> — and you stood back up at 40. It is spent; its number stays in your collection record.</p>' : ''}${v.bellRung ? '<p class="v-gear">🔔 <strong>You rang the Stillbell</strong> — the trace froze where it stood. It is spent; its number stays in your record.</p>' : ''}`;
   const fsRow = fs ? `<div class="v-stats">
         <div><strong>${fs.integrityLeft}</strong><span>integrity left</span></div>
         <div><strong>${fs.tracePeak}%</strong><span>peak trace</span></div>
@@ -322,6 +528,11 @@ function verdictPage(state, v, me) {
         <div><strong>${v.newToWorldCount}</strong><span>new to the whole world</span></div>
       </div>
       ${fsRow}
+      ${xpLine}
+      ${comboLine}
+      ${pitLine}
+      ${gearLines}
+      ${dropLines}
       ${v.storm ? '<p class="v-storm">⚡ Storm verdict — points paid double under the storm.</p>' : ''}
       <p class="v-shapes">It learned: ${shapes}</p>
       ${armor ? `<p class="v-armor">In answer, it hardened: ${esc(armor)}. It will be ready for you next time.</p>` : ''}
@@ -525,4 +736,4 @@ function deckPage(state, opts) {
   return shell('Arena Deck', body, null);
 }
 
-module.exports = { esc, shell, landing, arenaPage, authPage, profilePage, fighterPage, webPage, verdictPage, challengePage, deckPage, maintenanceCard };
+module.exports = { esc, shell, landing, arenaPage, authPage, profilePage, fighterPage, webPage, verdictPage, challengePage, deckPage, maintenanceCard, pitPage, devilCardHtml };

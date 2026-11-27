@@ -355,6 +355,24 @@ try {
     } catch (e) { threw = e; }
     check('D: no exception without WebAudio', !threw, threw && threw.message);
   }
+
+  // ===== Scenario E: Phase 3 voices — abilities, combos, items ==============
+  {
+    const { sandbox, doc } = makeWorld({
+      strikes: [],
+      verdict: { id: 'vE', result: 'win', endReason: 'breach', points: 40, secs: 60, shapesTaughtCount: 0, fightStats: null }
+    });
+    doc.getElementById('startbtn').dispatch('click');
+    await waitFor(() => doc.getElementById('kit').children.length === 4);
+    const plays = sandbox.TASFX.plays;
+    const names = ['overdrive', 'ghost', 'secondWind', 'rapid', 'combo', 'morph', 'feintReveal', 'whiff', 'heart', 'bell', 'drop', 'legendary'];
+    for (const n of names) {
+      const before = acLog.oscStarts.length;
+      sandbox.TASFX.play(n);
+      check(`E: "${n}" actually sounds`, plays.includes(n) && acLog.oscStarts.length > before,
+        `osc starts ${before} -> ${acLog.oscStarts.length}`);
+    }
+  }
 } finally {
   server.kill();
   fs.rmSync(dataDir, { recursive: true, force: true });
