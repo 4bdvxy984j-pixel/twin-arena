@@ -277,7 +277,15 @@ async function route(req, res) {
   }
 
   // ---- public state (landing polling)
+  // CORS: this endpoint is public by design (meter, leaders, rail, weather) —
+  // Steven's Arena Space reads it live from another origin. Public data only;
+  // no other route gets a CORS header.
+  if (method === 'OPTIONS' && p === '/api/public/state') {
+    res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET', 'Access-Control-Max-Age': '86400' });
+    return res.end();
+  }
   if (method === 'GET' && p === '/api/public/state') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
     const leaders = Object.values(state.players)
       .filter(x => x.email && x.publicProfile !== false && x.record.bouts > 0)
       .sort((a, b) => (b.record.breaches - a.record.breaches) || (b.points - a.points)).slice(0, 8)
