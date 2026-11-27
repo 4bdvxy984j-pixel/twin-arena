@@ -7,8 +7,9 @@
   "private": true,
   "scripts": {
     "start": "node src/server.js",
-    "verify": "node scripts/verify.mjs && node scripts/verify-deck.mjs && node scripts/verify-audio.mjs && node scripts/verify-pit.mjs && node scripts/verify-descent.mjs && node scripts/verify-mods.mjs && node scripts/verify-galactic.mjs",
-    "verify:mods": "node scripts/verify-mods.mjs"
+    "verify": "node scripts/verify.mjs && node scripts/verify-deck.mjs && node scripts/verify-audio.mjs && node scripts/verify-pit.mjs && node scripts/verify-descent.mjs && node scripts/verify-mods.mjs && node scripts/verify-galactic.mjs && node scripts/verify-realtime.mjs",
+    "verify:mods": "node scripts/verify-mods.mjs",
+    "verify:realtime": "node scripts/verify-realtime.mjs"
   },
   "type": "commonjs",
   "version": "1.0.0",

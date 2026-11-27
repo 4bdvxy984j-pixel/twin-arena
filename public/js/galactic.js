@@ -7,6 +7,11 @@
 (function () {
   var canvas = document.getElementById('gate');
   if (!canvas) return;
+  // THE REAL-TIME LAYER (galactic-rt.js) loads first: if it initialized,
+  // it owns this sky and the classic deck stands down — the fail-soft law.
+  // If it could not initialize, TA_RT_ACTIVE is never set and this deck
+  // is the battle, whole and referee-true, exactly as before.
+  if (window.TA_RT_ACTIVE) return;
   var ctx = canvas.getContext('2d');
   var W = canvas.width, H = canvas.height;
   var startBtn = document.getElementById('startbtn');

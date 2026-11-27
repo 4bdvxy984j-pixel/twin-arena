@@ -826,3 +826,118 @@ ul#haulfeed{list-style:none; padding:0; margin:.4rem 0}
   .gstars{animation:none}
   .gnode.playable{animation:none}
 }
+
+/* ==========================================================================
+   THE GALACTIC — REAL-TIME FLIGHT LAYER (G1.5)
+   A full-screen sky over the fly pad: the battle takes the whole viewport,
+   the ship flies under the thumb, and the weapon wheel rides the right
+   hand. The classic command deck underneath is untouched — this layer is
+   presentation + intents over the same referee, and if it cannot open,
+   it never renders and the classic deck is the battle entire.
+   ========================================================================== */
+body.rt-on{overflow:hidden}
+#rt-layer{position:fixed; inset:0; z-index:80; background:#02030a; overflow:hidden;
+  font-family:"Segoe UI","Avenir Next",system-ui,-apple-system,sans-serif; color:var(--ink);
+  -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent}
+#rt-canvas{position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none}
+.rt-hud{position:absolute; top:0; left:0; right:0; padding:calc(env(safe-area-inset-top, 0px) + 8px) 10px 6px;
+  display:grid; grid-template-columns:1fr auto 1fr; gap:6px 10px; pointer-events:none;
+  background:linear-gradient(180deg, rgba(2,3,10,.82), rgba(2,3,10,0))}
+.rt-hud .rt-cell label{display:block; font-size:.56rem; letter-spacing:.18em; color:var(--dim); margin-bottom:2px}
+.rt-hud .rt-cell.right{text-align:right}
+.rt-hud .rt-cell.right label{text-align:right}
+.rt-hud .bar{height:10px}
+.rt-hud .rt-num{font-size:.78rem; font-weight:700; margin-left:.35rem}
+.rt-clock{font-family:var(--font-display); font-size:1.25rem; font-weight:700; text-align:center; line-height:1;
+  padding-top:2px}
+.rt-clock.low{color:var(--bad)}
+.rt-runline{grid-column:1 / -1; text-align:center; font-size:.68rem; letter-spacing:.12em; color:var(--dim)}
+.rt-runline b{color:var(--ink)}
+.rt-topbtns{position:absolute; top:calc(env(safe-area-inset-top, 0px) + 64px); right:8px; display:flex; gap:6px; z-index:5}
+.rt-topbtns button{pointer-events:auto; background:rgba(10,14,24,.72); color:var(--dim); border:1px solid var(--line);
+  border-radius:8px; font-size:.62rem; letter-spacing:.12em; padding:.42rem .55rem; cursor:pointer}
+.rt-topbtns button:active{color:var(--ink); border-color:var(--cyan)}
+.rt-winframe{position:absolute; top:calc(env(safe-area-inset-top, 0px) + 96px); left:50%; transform:translateX(-50%);
+  background:rgba(20,16,2,.85); border:1px solid var(--gold); color:var(--gold); border-radius:999px;
+  font-size:.66rem; letter-spacing:.16em; padding:.3rem .7rem .42rem; z-index:4; text-align:center; min-width:170px}
+.rt-winframe i{display:block; height:3px; background:var(--gold); margin-top:3px; border-radius:2px}
+.rt-twinread{position:absolute; left:10px; right:10px; bottom:calc(env(safe-area-inset-bottom, 0px) + 118px);
+  text-align:center; font-size:.72rem; font-style:italic; color:#c9a0ff; pointer-events:none;
+  text-shadow:0 1px 8px #000, 0 0 2px #000}
+.rt-controls{position:absolute; left:0; right:0; bottom:0; z-index:6; pointer-events:none;
+  padding:0 14px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  display:flex; justify-content:space-between; align-items:flex-end}
+.rt-cluster{display:flex; flex-direction:column; gap:10px; align-items:center}
+.rt-abilities{display:flex; gap:8px; pointer-events:none}
+.rt-ability{pointer-events:auto; position:relative; overflow:hidden; width:52px; height:52px; border-radius:14px;
+  background:rgba(10,14,24,.78); border:1px solid var(--tc,#888); color:var(--ink); cursor:pointer;
+  font-size:.52rem; letter-spacing:.06em; padding:2px}
+.rt-ability .an{display:block; font-size:.58rem; font-weight:700; color:var(--tc,#fff); line-height:1.15}
+.rt-ability:disabled{opacity:.45}
+.rt-ability .cdveil{position:absolute; left:0; top:0; bottom:0; background:rgba(0,0,0,.62); pointer-events:none}
+.rt-ability .noenergy{position:absolute; inset:auto 0 1px; font-size:.48rem; color:var(--bad)}
+.rt-bigbtn{pointer-events:auto; position:relative; border-radius:50%; cursor:pointer; color:var(--ink);
+  background:radial-gradient(circle at 35% 30%, rgba(255,255,255,.13), rgba(10,14,24,.88) 62%);
+  border:2px solid var(--line); touch-action:none; overflow:hidden;
+  font-family:"Segoe UI","Avenir Next",system-ui,sans-serif}
+.rt-bigbtn:active{transform:scale(.96)}
+.rt-bigbtn .bl{display:block; font-weight:800; letter-spacing:.1em}
+.rt-bigbtn .bs{display:block; font-size:.56rem; color:var(--dim); letter-spacing:.08em; margin-top:2px}
+.rt-bigbtn .cdveil{position:absolute; left:0; right:0; bottom:0; background:rgba(0,0,0,.55); pointer-events:none}
+#rt-shield{width:86px; height:86px; border-color:#8a7420}
+#rt-shield .bl{font-size:.8rem; color:var(--gold)}
+#rt-shield.armed{border-color:var(--gold); box-shadow:0 0 22px rgba(252,238,10,.55), inset 0 0 18px rgba(252,238,10,.25);
+  animation:rtpulse .5s infinite alternate}
+@keyframes rtpulse{from{transform:scale(1)} to{transform:scale(1.05)}}
+#rt-fire{width:104px; height:104px}
+#rt-fire .bl{font-size:1.02rem}
+#rt-fire .bs{color:var(--ink); opacity:.75}
+#rt-wheelbtn{width:72px; height:72px; border-color:#3a4a6b}
+#rt-wheelbtn .bl{font-size:.68rem; color:var(--cyan)}
+.rt-panel{position:absolute; inset:0; z-index:8; display:flex; align-items:center; justify-content:center;
+  background:rgba(2,3,10,.55); padding:18px}
+.rt-panel .rt-card{background:var(--panelbg); border:1px solid var(--line); clip-path:var(--cut);
+  max-width:520px; width:100%; max-height:92%; overflow:auto; padding:1.1rem 1.2rem; text-align:center}
+.rt-panel h2{margin:.2rem 0 .5rem; font-size:1.45rem}
+.rt-panel .rt-kicker{font-size:.62rem; letter-spacing:.24em; color:var(--ember)}
+.rt-panel .rt-controls-help{font-size:.8rem; color:var(--dim); line-height:1.55; text-align:left; margin:.7rem auto; max-width:420px}
+.rt-panel .rt-controls-help b{color:var(--ink)}
+.rt-panel .armory{margin:.8rem 0; text-align:left}
+.rt-banner{position:absolute; top:24%; left:0; right:0; z-index:5; text-align:center; pointer-events:none;
+  font-family:var(--font-display); letter-spacing:.3em; font-size:1rem; color:var(--parchment);
+  text-shadow:0 0 18px rgba(255,150,60,.6), 0 2px 6px #000; opacity:0}
+.rt-banner.show{animation:rtbanner 2.6s ease-out forwards}
+@keyframes rtbanner{0%{opacity:0; transform:scale(.92)} 12%{opacity:1; transform:scale(1)} 78%{opacity:1} 100%{opacity:0}}
+.rt-banner .rt-stage-no{display:block; font-size:.62rem; letter-spacing:.4em; color:var(--ember); margin-bottom:.3rem}
+.rt-holdchip{pointer-events:auto; background:rgba(10,14,24,.78); border:1px solid var(--line); color:var(--dim);
+  border-radius:999px; font-size:.64rem; letter-spacing:.1em; padding:.45rem .7rem; cursor:pointer}
+.rt-holdlist{position:absolute; left:10px; bottom:calc(env(safe-area-inset-bottom, 0px) + 210px); z-index:6;
+  background:rgba(6,8,14,.92); border:1px solid var(--line); border-radius:10px; padding:.6rem .8rem;
+  max-width:78vw; max-height:38vh; overflow:auto}
+.rt-holdlist ul{list-style:none; margin:0; padding:0; font-size:.78rem}
+.rt-holdlist h3{margin:0 0 .35rem; font-size:.66rem; letter-spacing:.18em; color:var(--dim)}
+#rt-layer .lootlayer{position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:3}
+#rt-layer .bossplate{position:absolute; z-index:5}
+#rt-layer .verdict{position:relative; inset:auto}
+.rt-hidden{display:none !important}
+@media (max-height:500px){
+  #rt-fire{width:84px; height:84px} #rt-shield{width:70px; height:70px} #rt-wheelbtn{width:60px; height:60px}
+  .rt-twinread{bottom:calc(env(safe-area-inset-bottom, 0px) + 96px)}
+}
+@media (prefers-reduced-motion: reduce){
+  #rt-shield.armed{animation:none}
+  .rt-banner.show{animation-duration:.1s}
+}
+
+/* Phase 1 stage pips + the Ledger hook (star map) */
+.gstages{display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; margin:.7rem 0 .2rem}
+.gstages-label{font-size:.6rem; letter-spacing:.22em; color:var(--ember); margin-right:.2rem}
+.gpip{width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+  font-size:.72rem; font-weight:700; border:1px solid var(--line); color:var(--dim); background:rgba(10,14,24,.6)}
+.gpip.cleared{border-color:var(--oldgold); color:#0a0c12; background:linear-gradient(180deg, #ffd98a, var(--oldgold))}
+.gpip.next{border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 10px rgba(0,229,255,.35)}
+.gpip.cap{border-radius:8px}
+.gpip.cap.cleared{background:linear-gradient(180deg, #ffb37a, var(--ember)); border-color:var(--ember)}
+.gstages-note{font-size:.72rem; color:var(--dim); font-style:italic; margin-left:.3rem}
+.gsec-hook{border-left:3px solid var(--violet); background:rgba(185,103,255,.07); padding:.55rem .8rem; font-size:.86rem}
+.gnode.hooked .gn-cap{color:#c9a0ff}

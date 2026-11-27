@@ -17,7 +17,7 @@ function shell(title, body, me) {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<!-- twin-arena build: 2026.11.27-galactic -->
+<!-- twin-arena build: 2026.11.27-galactic-rt -->
 <title>${esc(title)} — THE TWIN ARENA</title>
 <link rel="stylesheet" href="/css/style.css">
 <script src="/js/sfx.js"></script>
@@ -686,8 +686,9 @@ function verdictPage(state, v, me) {
       ${v.descent.lost && v.descent.lost.length ? `<p class="bad">Left in the dark: ${v.descent.lost.map(bp => `${esc(bp.name)} (${bp.tier})`).join(' · ')} — death takes the unbanked STURDY and RARE. EPIC and above always come home.</p>` : ''}
     </div>` : '';
   const galacticLine = v.mode === 'galactic' && v.galactic ? `<div class="v-descent">
-      <p>🚀 A Galactic sortie in <strong>Sector ${v.galactic.sector} — Emberfall Reach</strong>: <strong>${v.galactic.encountersCleared}</strong> encounters cleared · deepest <strong>Encounter ${v.galactic.deepest}</strong> · score <strong>${v.galactic.score}</strong> · capitals slain <strong>${v.galactic.capitalsSlain}</strong>.</p>
+      <p>🚀 A Galactic sortie in <strong>Sector ${v.galactic.sector} — Emberfall Reach</strong>: <strong>${v.galactic.encountersCleared}</strong> stages cleared · deepest <strong>Stage ${v.galactic.deepest}</strong> · score <strong>${v.galactic.score}</strong> · capitals slain <strong>${v.galactic.capitalsSlain}</strong>.</p>
       ${v.galactic.sectorCleared ? `<p>★ <strong>SECTOR CLEARED</strong>${v.galactic.firstClear ? ' — this captain\u2019s first clearing of the Reach, receipted in the books, named and dated and permanent.' : ' — the Reach stays cleared on this captain\u2019s chart, and its armada flies a notch quieter for them now.'}</p>` : ''}
+      ${v.galactic.sectorCleared ? `<p>✦ <strong>THE RELAY GOES DARK — AND SOMETHING BEYOND IT LOOKS UP.</strong> The Herald was a relay, repeating this captain's shape to a deeper book. ${v.galactic.firstClear ? '🖋 <strong>THE LEDGER\u2019S SEAL</strong> stands on this receipt — the tie-in mark of the first clearing. ' : ''}On the chart, Sector 2's lock has changed its face: <strong>THE LEDGER HAS YOUR NAME NOW.</strong></p>` : ''}
       ${v.galactic.banked && v.galactic.banked.length ? `<p>Banked into the cargo hold (haul value ${v.galactic.haulValue}): ${v.galactic.banked.map(bp => `<span class="tierbadge t-${bp.tier.toLowerCase()}">${esc(bp.name)} (${bp.tier}${bp.serial ? ' No. ' + bp.serial : ''})</span>`).join(' ')}</p>` : `<p>Nothing banked — the hold was empty when the sortie ended.</p>`}
       ${v.galactic.lost && v.galactic.lost.length ? `<p class="bad">Lost among the stars: ${v.galactic.lost.map(bp => `${esc(bp.name)} (${bp.tier})`).join(' · ')} — destruction takes the unbanked STURDY and RARE. EPIC and above always come home.</p>` : ''}
     </div>` : '';
@@ -959,17 +960,23 @@ function galacticPage(state, me) {
         : `<span class="gn-state held">HELD BY THE ARMADA</span>`;
       return `<a class="gnode playable ${cleared1 ? 'is-cleared' : ''}" href="#sector-1" style="left:${c.x}%;top:${c.y}%"><span class="gn-num">${numerals[i]}</span><span class="gn-name">${esc(s.name)}</span>${st}<span class="gn-cap">capital: ${esc(s.capital.name)}</span></a>`;
     }
-    return `<div class="gnode locked" style="left:${c.x}%;top:${c.y}%" aria-disabled="true"><span class="gn-num">${numerals[i]}</span><span class="gn-name">${esc(s.name)}</span><span class="gn-state locked">🔒 LOCKED</span><span class="gn-cap">${s.capital ? 'capital: ' + esc(s.capital.name) : 'capital: uncharted'}</span></div>`;
+    const hooked = s.id === 2 && cleared1;
+    return `<div class="gnode locked ${hooked ? 'hooked' : ''}" style="left:${c.x}%;top:${c.y}%" aria-disabled="true"><span class="gn-num">${numerals[i]}</span><span class="gn-name">${esc(s.name)}</span><span class="gn-state locked">🔒 LOCKED</span><span class="gn-cap">${s.capital ? 'capital: ' + esc(s.capital.name) + (hooked ? ' — it has your name now' : '') : 'capital: uncharted'}</span></div>`;
   }).join('');
   const routePts = coords.map(c => `${c.x},${c.y}`).join(' ');
   const ladder = game.GALACTIC_LADDER.map((kind, i) => {
     const t = game.GALACTIC_TIERS[kind];
     return `<span class="glad ${kind === 'capital' ? 'cap' : ''}">${i + 1} · ${t.tier.toUpperCase()} <em>${t.className}</em>${kind === 'squadrons' ? ' · MIRAGE feints' : ''}${kind === 'capital' ? ' · ' + esc(game.GALACTIC_CAPITAL.name) : ''}</span>`;
   }).join('');
+  const stagePips = member ? `<div class="gstages" aria-label="Phase 1 stages"><span class="gstages-label">PHASE 1 · EIGHT STAGES</span>${game.GALACTIC_LADDER.map((kind, i) => {
+    const n = i + 1;
+    const st = cleared1 || rec.deepest >= n ? 'cleared' : (rec.deepest === n - 1 || (rec.deepest === 0 && n === 1) ? 'next' : 'ahead');
+    return `<span class="gpip ${st} ${kind === 'capital' ? 'cap' : ''}" title="Stage ${n} — ${game.GALACTIC_TIERS[kind].tier}${kind === 'capital' ? ' · THE HERALD' : ''}">${n}</span>`;
+  }).join('')}<span class="gstages-note">${cleared1 ? 'Phase 1 cleared — the Herald has fallen' : rec.deepest ? 'your road stands at Stage ' + Math.min(8, rec.deepest + 1) + ' of 8' : 'the Herald stands at Stage 8'}</span></div>` : '';
   const myRecord = member ? `
     <div class="descent-record grec">
       <div><strong>${rec.sorties}</strong><span>sorties</span></div>
-      <div><strong>${rec.deepest ? 'Enc. ' + rec.deepest : '—'}</strong><span>deepest</span></div>
+      <div><strong>${rec.deepest ? 'Stage ' + rec.deepest : '—'}</strong><span>deepest</span></div>
       <div><strong>${rec.bestScore}</strong><span>best score</span></div>
       <div><strong>${rec.capitalsSlain}</strong><span>capitals slain</span></div>
       <div><strong>${game.galacticAttention(state, me, 1)}%</strong><span>armada attention</span></div>
@@ -980,8 +987,9 @@ function galacticPage(state, me) {
         <header><span class="gsec-num">${numerals[i]}</span><div><h2>${esc(s.name)}</h2><span class="gsec-state ${cleared1 ? 'cleared' : 'held'}">${cleared1 ? '★ CLEARED BY YOU — the armada flies a notch quieter for you here' : 'HELD BY THE ARMADA'}</span></div></header>
         <p class="gsec-story">${esc(s.story)}</p>
         <div class="gladder">${ladder}</div>
-        <p class="dim">Eight encounters, flown as one sortie: your integrity and your attention carry from fight to fight, and the haul rides unbanked until you withdraw — or the Herald falls and banks it all on the spot. Destruction takes the unbanked STURDY and RARE; EPIC and above always come home. Clearing pays a burst of XP, a guaranteed capital-table drop (EPIC, with a LEGENDARY's chance), and a permanent notch off this sector's aggression for you. No GODFORGED falls in Sector 1 — god-tier steel waits at Blaze-class capitals, in deeper skies.</p>
-        ${fc ? `<p class="g-firstclear">★ First cleared by <strong>${esc(fc.name)}</strong> · ${new Date(fc.at).toISOString().slice(0, 10)} — the receipt stands in the books.</p>` : '<p class="g-firstclear unclaimed">★ No captain has cleared this sector. The first receipt is unwritten.</p>'}
+        ${stagePips}
+        <p class="dim">Phase 1: eight stages, flown as one sortie — pickets to patrols to Mirage wings, and THE HERALD enthroned at Stage 8. Your integrity and your attention carry from fight to fight, and the haul rides unbanked until you withdraw — or the Herald falls and banks it all on the spot. Destruction takes the unbanked STURDY and RARE; EPIC and above always come home. Clearing pays a burst of XP, a guaranteed capital-table drop (EPIC, with a LEGENDARY's chance), and a permanent notch off this sector's aggression for you. No GODFORGED falls in Sector 1 — god-tier steel waits at Blaze-class capitals, in deeper skies.</p>
+        ${fc ? `<p class="g-firstclear">★ First cleared by <strong>${esc(fc.name)}</strong> · ${new Date(fc.at).toISOString().slice(0, 10)} — the receipt stands in the books, and 🖋 <strong>the Ledger's seal</strong> stands on it: the Reach was a relay, and what lies beyond it has the name now.</p>` : '<p class="g-firstclear unclaimed">★ No captain has cleared this sector. The first receipt is unwritten.</p>'}
         ${myRecord}
         <div class="gdoors">
           ${member ? '<a class="fightbtn gfight" href="/galactic/fly">🚀&nbsp; CHALLENGE THE ARMADA</a>' : '<p class="dim">The sky is members-only — a sortie keeps what it wins, and keeping requires a name. <a href="/signup">Claim your profile</a> and the Reach is yours to fly.</p>'}
@@ -990,11 +998,13 @@ function galacticPage(state, me) {
         <p class="dim">The dueling field is drawn on the chart because it is coming — live captain-versus-captain duels, refereed in real time. It opens in its own phase, on its own order, and not a day before it can be refereed honestly. The armada, meanwhile, is here now.</p>
       </article>`;
     }
-    return `<article class="gsector locked" id="sector-${s.id}">
+    const hook2 = s.id === 2 && cleared1 ? `<p class="gsec-hook">✦ <strong>THE LEDGER HAS YOUR NAME NOW.</strong> The Herald was its relay, and the relay kept the receipt of its own fall — your name, your date, your road through the Reach. This door stays locked until its campaign; it is simply locked with your name on it now.</p>` : '';
+    return `<article class="gsector locked ${hook2 ? 'hooked' : ''}" id="sector-${s.id}">
       <header><span class="gsec-num">${numerals[i]}</span><div><h2>${esc(s.name)}</h2><span class="gsec-state locked">🔒 LOCKED</span></div></header>
       <p class="gsec-story">${esc(s.story)}</p>
       ${s.capital ? `<p class="dim">Its capital: <strong>${esc(s.capital.name)}</strong> — held for its own sector, fought in its own campaign.</p>` : '<p class="dim">Its capital is not yet charted.</p>'}
       <p class="glockreason">${esc(s.lockedReason)}</p>
+      ${hook2}
     </article>`;
   }).join('');
   const strip = member ? `
@@ -1033,7 +1043,7 @@ function galacticPage(state, me) {
     <div class="panel">
       <h2>How the sky works</h2>
       <ol class="how">
-        <li><strong>The sky is a school for intruders.</strong> This theater is a hacking war at fleet scale, and it teaches the real thinking: Probe is recon — mark the system before you touch it. Flood is the battering ram. Whisper is stealth, Decoy is misdirection, and Attention is trace discipline — how loud you fly is how fast she finds you. A sector is a network; clearing it is an intrusion end to end.</li>
+        <li><strong>The sky is a masterclass for intruders.</strong> This theater is a hacking war at fleet scale, and it teaches the real thinking: Probe is recon — mark the system before you touch it. Flood is the battering ram. Whisper is stealth, Decoy is misdirection, and Attention is trace discipline — how loud you fly is how fast she finds you. A sector is a network; clearing it is an intrusion end to end.</li>
         <li><strong>Your build is your ship.</strong> Tools become weapons systems with identical referee math; worn gear rides the hull and sets its trim; fitted mods are hardpoints; the Mod Rail is your systems row, and its deployables fire in space exactly as in the Arena.</li>
         <li><strong>One pool, one mind.</strong> XP, levels and weight class are shared across every theater. Her global learning ticks from galactic fights at the Arena rate — a counter she evolves against you anywhere is waiting everywhere.</li>
         <li><strong>The Trace is Armada Attention here.</strong> The more you fight in a sector, the more its armada has read you — sector familiarity that sharpens its counters, filed per sector. It decays when you hunt in other theaters. Your Arena habits pre-read you at +10%, capped low.</li>
@@ -1051,7 +1061,7 @@ function galacticFlyPage(state, me) {
     <div class="gfly-hero">
       <span class="g-kicker">SECTOR 1 · EMBERFALL REACH</span>
       <h1>FLY THE SORTIE</h1>
-      <p class="lede">Eight systems between you and the Herald — each one a gate with guns. Your ship is your build — weapons, hull, hardpoints, systems row — and the armada is reading you the whole way in: every breach you fly teaches the network your shape.</p>
+      <p class="lede">Phase 1: eight stages between you and the Herald — each one a gate with guns. Your ship is your build — weapons, hull, hardpoints, systems row — and the armada is reading you the whole way in: every breach you fly teaches the network your shape.</p>
     </div>`;
   if (!me || !me.email) {
     const body = `<section class="descent-wrap">${hero}
@@ -1068,7 +1078,7 @@ function galacticFlyPage(state, me) {
     ${bannersHtml(state)}
     <div class="descent-record">
       <div><strong>${rec.sorties}</strong><span>sorties</span></div>
-      <div><strong>${rec.deepest ? 'Enc. ' + rec.deepest : '—'}</strong><span>deepest</span></div>
+      <div><strong>${rec.deepest ? 'Stage ' + rec.deepest : '—'}</strong><span>deepest</span></div>
       <div><strong>${rec.bestScore}</strong><span>best score</span></div>
       <div><strong>${rec.bestHaul}</strong><span>richest haul</span></div>
       <div><strong>${rec.capitalsSlain}</strong><span>capitals slain</span></div>
@@ -1101,6 +1111,7 @@ function galacticFlyPage(state, me) {
         <p>Your full Command Deck flies with you — tool pods as weapons systems, abilities, the shield flare — plus whatever your hull is wearing. Refit at <a href="/galactic/bridge">the Bridge</a>, never mid-sortie.</p>
         ${armoryHtml(me)}
         <button id="startbtn" class="fightbtn">🚀 BEGIN THE SORTIE</button>
+        <p class="dim">Real-time flight opens over this pad when your device can hold it — drag to fly, hold FIRE, spin the wheel to swap weapons mid-flight. If it cannot open, this classic command deck is the battle entire, whole and referee-true. <a href="/galactic/fly?classic=1">Fly the classic deck directly</a>.</p>
         <p class="dim">A sortie abandoned from this pad banks its haul like a withdrawal — the Keeper is not cruel, but the Reach keeps its own ledger.</p>
       </div>
       <div id="verdict" class="verdict hidden"></div>
@@ -1119,6 +1130,7 @@ function galacticFlyPage(state, me) {
     </div>
   </section>
   <script>window.TA_GALACTIC = true;</script>
+  <script src="/js/galactic-rt.js"></script>
   <script src="/js/galactic.js"></script>`;
   return shell('Fly the Sortie', body, me);
 }
