@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- twin-arena build: 2026.11.27-galactic-rt -->
+<title>Fly the Sortie — THE TWIN ARENA</title>
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/sfx.js"></script>
+</head><body>
+<div class="embers" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brandmark">◐</span> THE TWIN ARENA</a>
+  <button id="navtoggle" class="navtoggle" type="button" aria-expanded="false" aria-controls="topnav" aria-label="Open the menu">☰</button>
+  <nav id="topnav"><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/descent">The Descent</a><a href="/galactic">The Galactic</a><a href="/web">Evolution</a><a href="/profile">FreshCaptain</a> <a href="/auth/logout">Sign out</a><button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
+</header>
+<main>
+  <section class="descent-wrap gfly">
+    
+    <div class="gfly-hero">
+      <span class="g-kicker">SECTOR 1 · EMBERFALL REACH</span>
+      <h1>FLY THE SORTIE</h1>
+      <p class="lede">Phase 1: eight stages between you and the Herald — each one a gate with guns. Your ship is your build — weapons, hull, hardpoints, systems row — and the armada is reading you the whole way in: every breach you fly teaches the network your shape.</p>
+    </div>
+    
+    <div class="descent-record">
+      <div><strong>0</strong><span>sorties</span></div>
+      <div><strong>—</strong><span>deepest</span></div>
+      <div><strong>0</strong><span>best score</span></div>
+      <div><strong>0</strong><span>richest haul</span></div>
+      <div><strong>0</strong><span>capitals slain</span></div>
+      <div><strong>—</strong><span>sector cleared</span></div>
+    </div>
+    <div class="hud">
+      <div class="hudcell"><label>ENEMY HULL</label><div class="bar hp"><i id="hpbar"></i></div><span id="hptext">100</span></div>
+      <div class="hudcell"><label>INTEGRITY</label><div class="bar int"><i id="intbar"></i></div><span id="inttext">100</span></div>
+      <div class="hudcell timer"><label>TIME</label><span id="clock">2:00</span></div>
+      <div class="hudcell"><label>ENERGY</label><div class="bar en"><i id="enbar"></i></div><span id="entext">100</span></div>
+      <div class="hudcell"><label>ATTENTION</label><div class="bar trace" id="tracewrap"><i id="tracebar"></i></div><span id="tracetext">0%</span></div>
+    </div>
+    <div class="runline" id="runline">Encounter — · Score 0 · Carrying nothing</div>
+    <div class="stage galactic-stage">
+      <canvas id="gate" width="900" height="560"></canvas>
+      <div id="lootlayer" class="lootlayer"></div>
+      <div id="bossplate" class="bossplate hidden"></div>
+      <div id="depthbanner" class="depthbanner hidden"></div>
+      <div id="gatechoice" class="gatechoice hidden">
+        <h2>THE ENEMY BREAKS</h2>
+        <p id="gatechoice-text">Press on into the Reach, or withdraw and bank everything you carry.</p>
+        <div class="gatechoice-btns">
+          <button id="descend-btn" class="fightbtn descend" type="button">▲ PRESS ON</button>
+          <button id="ascend-btn" class="fightbtn ascend" type="button">▼ WITHDRAW &amp; BANK</button>
+        </div>
+      </div>
+      <div id="winframe" class="winframe hidden"><span id="winframe-label">OPEN WINDOW ×2</span><i id="winframe-bar"></i></div>
+      <div id="stage-msg" class="stage-msg">
+        <h2>Your ship is on the pad, FreshCaptain.</h2>
+        <p>Your full Command Deck flies with you — tool pods as weapons systems, abilities, the shield flare — plus whatever your hull is wearing. Refit at <a href="/galactic/bridge">the Bridge</a>, never mid-sortie.</p>
+        <div class="armory" data-armory>
+    <div class="armory-head"><span class="armory-title">⚔ THE ARMORY — YOUR BUILD, LOADED</span><button class="ghostbtn armory-toggle" type="button" data-armory-toggle>Fold the armory</button></div>
+    <div class="armory-body">
+      <div class="armory-stands"><div class="stand r-legendary"><span class="stand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5v3.5"/><path d="M5.5 4.5l2 2.5M18.5 4.5l-2 2.5"/><path d="M2.5 14.5c2.4 0 2.4 1.8 4.8 1.8s2.4-1.8 4.8-1.8 2.4 1.8 4.8 1.8 2.4-1.8 4.6-1.8"/><path d="M2.5 19c2.4 0 2.4 1.8 4.8 1.8S9.7 19 12.1 19s2.4 1.8 4.8 1.8 2.4-1.8 4.6-1.8"/></svg></span><span class="stand-slot">Flood</span><strong class="stand-name">EMBERBRAND</strong><span class="tierbadge t-legendary">LEGENDARY No. 1</span><span class="stand-affixes">dmg+0.2 · splash+4 · cd+0.1 · Unique: your Floods ignite the gate — a slow burn rides every strike.</span><span class="stand-mod" style="--mc:#ff2a6d">♨ EMBERLINE socketed</span></div><div class="stand bare"><span class="stand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="stand-slot">Probe</span><strong class="stand-name dim">BARE</strong><span class="stand-affixes dim">nothing worn — the depths provide</span><span class="stand-mod" style="--mc:#00e5ff">◎ THROUGHLINE socketed</span></div><div class="stand bare"><span class="stand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="12" r="1.7" fill="currentColor" stroke="none"/><path d="M12.5 8.8a4.6 4.6 0 0 1 0 6.4M15.8 6.2a8.4 8.4 0 0 1 0 11.6M19 3.8a12.2 12.2 0 0 1 0 16.4"/></svg></span><span class="stand-slot">Whisper</span><strong class="stand-name dim">BARE</strong><span class="stand-affixes dim">nothing worn — the depths provide</span><span class="stand-mod" style="--mc:#b967ff">≋ ASHEN VEIL socketed</span></div><div class="stand bare"><span class="stand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 21v-7.5a7.5 7.5 0 0 1 15 0V21"/><path d="M9.3 21v-4.8a2.7 2.7 0 0 1 5.4 0V21"/><path d="M2.5 21h19"/></svg></span><span class="stand-slot">Decoy</span><strong class="stand-name dim">BARE</strong><span class="stand-affixes dim">nothing worn — the depths provide</span><span class="stand-mod" style="--mc:#fcee0a">↩ PAYBACK COIL socketed</span></div><div class="stand r-epic"><span class="stand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8 19 5v6c0 4.8-3 8.4-7 10.2C8 19.4 5 15.8 5 11V5Z"/><path d="M12 6.2v11.4M7.6 9.2h8.8"/></svg></span><span class="stand-slot">Body relic</span><strong class="stand-name">Keeper Plate of the Wall</strong><span class="tierbadge t-epic">EPIC</span><span class="stand-affixes">plating+25 · coolant+0.5 · parry+200</span></div></div>
+      <h4 class="armory-sub">On the shelf — treasures of the house</h4><ul class="armory-shelf"><li class="shelfline founder"><strong>THE FOUNDER&#39;S EMBER</strong> <span class="rarity founder">FOUNDER</span> <span class="dim">· yours: No. 7</span></li></ul>
+      <h4 class="armory-sub">Abilities lit</h4><div class="armory-abilities"><span class="ability-chip"><i style="background:#ff2a6d"></i>✦ OVERDRIVE</span><span class="ability-chip"><i style="background:#b967ff"></i>✦ GHOST</span><span class="ability-chip"><i style="background:#5dffa0"></i>✦ SECOND WIND</span><span class="ability-chip"><i style="background:#00e5ff"></i>✦ RAPID CYCLING</span></div>
+    </div>
+    <p class="armory-line" data-armory-line>Build: EMBERBRAND · Keeper Plate of the Wall · 4 mods socketed · 4 rail mods owned · 1 treasure shelved · 4 abilities lit</p>
+  </div>
+        <button id="startbtn" class="fightbtn">🚀 BEGIN THE SORTIE</button>
+        <p class="dim">Real-time flight opens over this pad when your device can hold it — drag to fly, hold FIRE, spin the wheel to swap weapons mid-flight. If it cannot open, this classic command deck is the battle entire, whole and referee-true. <a href="/galactic/fly?classic=1">Fly the classic deck directly</a>.</p>
+        <p class="dim">A sortie abandoned from this pad banks its haul like a withdrawal — the Keeper is not cruel, but the Reach keeps its own ledger.</p>
+      </div>
+      <div id="verdict" class="verdict hidden"></div>
+    </div>
+    <div id="twinread" class="twinread">The armada is reading you…</div>
+    <button id="parrybtn" class="parrybtn" type="button" disabled><span class="parry-charge" id="parry-charge"></span>⚡ SHIELD FLARE<span>tap when it winds up — or tap the enemy, or hit SPACE</span></button>
+    <div class="kit" id="kit"></div>
+    <div class="kit abilities" id="abilities"></div>
+    <div class="kit modrail" id="modrail"></div>
+    <div class="haulfeed panel"><h2>In the hold — unbanked until you withdraw or a capital falls</h2><ul id="haulfeed"><li class="dim">Empty hold. The Reach provides.</li></ul>
+    <p><button id="abandonbtn" class="ghostbtn hidden" type="button">Abandon the sortie — withdraw with what you carry</button></p></div>
+    <div class="panel descent-boards">
+    <h2>The sortie boards</h2>
+    <p class="dim">1 sorties flown · 8 encounters cleared · 1 capitals slain · 0 ships destroyed · 0 LEGENDARY pieces banked from the sky.</p>
+    <p class="g-firstclear">★ SECTOR 1 FIRST CLEARED BY <strong>ClearCaptain</strong> · 2026-11-27 — receipted in the books, named and dated and permanent.</p>
+    <h3 class="boardh">Deepest into the Reach</h3><ul class="board"><li><a href="/fighter/capclear"><span class="lname">ClearCaptain</span><span class="lstat">Encounter 8</span></a></li></ul>
+    <h3 class="boardh">Highest sortie score</h3><ul class="board"><li><a href="/fighter/capclear"><span class="lname">ClearCaptain</span><span class="lstat">240 pts</span></a></li></ul>
+    <h3 class="boardh">Richest haul banked</h3><ul class="board"><li><a href="/fighter/capclear"><span class="lname">ClearCaptain</span><span class="lstat">1</span></a></li></ul>
+  </div>
+    <div class="arena-foot">
+      <span>Pickets teach the theater; Patrols pair up; Squadrons fly MIRAGE feints — false wind-ups that eat a hasty flare. THE HERALD crowns the Reach, and its glances hunt the weapon your sortie leans on. Attention is the Trace wearing a sector's sky: loud flying is read, and read flying is countered.</span>
+      <button id="mutebtn" class="ghostbtn" type="button">Sound: on</button>
+    </div>
+  </section>
+  <script>window.TA_GALACTIC = true;</script>
+  <script src="/js/galactic-rt.js"></script>
+  <script src="/js/galactic.js"></script></main>
+<footer class="foot">
+  <p>A game about Gatekeeper's Twin — the sparring partner that learns. Every fight here teaches it a shape;
+  every shape makes the next fighter's road harder. Play is asynchronous: you fight the Twin other fighters educated,
+  and other fighters will meet the one you educate. No live player-versus-player — the opponent is the Twin, and it is enough.</p>
+</footer>
+<script src="/js/site.js"></script>
+</body></html>
