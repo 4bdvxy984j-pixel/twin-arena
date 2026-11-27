@@ -676,6 +676,34 @@ try {
     check('the star map itself shows the sector CLEARED after the restart',
       map.includes('CLEARED BY YOU') && map.includes('First cleared by'));
   }
+
+  // ---- the Super Deck's Galactic section (Sector Command)
+  {
+    const deck = await (await call(new Jar(), 'GET', '/deck?key=' + ADMIN)).text();
+    check('the Super Deck carries a GALACTIC — SECTOR COMMAND section',
+      deck.includes('THE GALACTIC — SECTOR COMMAND') && deck.includes('Captains of the Reach'));
+    check('the deck section reads the theater\u2019s books: tallies and the first-clear receipt',
+      deck.includes('sorties flown') && deck.includes('FIRST CLEARED BY') && deck.includes('Captain'));
+    check('the deck section names the mint fence on its face (no numbered steel from the deck)',
+      deck.includes('The deck never mints numbered steel'));
+    const wrong = await json(null, 'POST', '/api/deck/grant-galactic', { key: 'nope', playerId: 'captain1' });
+    check('the galactic grant refuses a wrong key', wrong.status === 403, `status=${wrong.status}`);
+    const ghost = await json(null, 'POST', '/api/deck/grant-galactic', { key: ADMIN, playerId: 'nobody' });
+    check('the galactic grant refuses a fighter who is not there', ghost.status === 404, `status=${ghost.status}`);
+    const before = await json(jarFor('captain1'), 'GET', '/api/me');
+    const gearBefore = (before.body.gear || []).length;
+    const grant = await json(null, 'POST', '/api/deck/grant-galactic', { key: ADMIN, playerId: 'captain1' });
+    check('the galactic grant lands: one EPIC piece off the capital table, banked unworn',
+      grant.status === 200 && grant.body.granted && grant.body.granted.tier === 'EPIC' &&
+      grant.body.granted.slot !== 'god',
+      `status=${grant.status} granted=${JSON.stringify(grant.body.granted || null)}`);
+    const after = await json(jarFor('captain1'), 'GET', '/api/me');
+    const grantedPiece = (after.body.gear || []).find(g => g.id === grant.body.granted.id);
+    check('the granted piece rides in the captain\u2019s satchel (gear +1, banked unworn, EPIC — not numbered steel)',
+      (after.body.gear || []).length === gearBefore + 1 &&
+      !!grantedPiece && !grantedPiece.worn && grantedPiece.tier === 'EPIC',
+      `gear ${gearBefore} → ${(after.body.gear || []).length}`);
+  }
 } finally {
   try { server.kill('SIGKILL'); } catch {}
   fs.rmSync(dataDir, { recursive: true, force: true });

@@ -1516,6 +1516,31 @@ async function route(req, res) {
     });
   }
 
+  // SUPER DECK — GRANT A CAPITAL-TABLE DROP (ADMIN_KEY only): the Keeper
+  // hands a captain one piece off the Herald's own table, through the same
+  // books a capital kill pays through (rollGearPiece + bankHaul). The
+  // grant-gear fence stands here unchanged: the deck never mints numbered
+  // steel — this grant caps at EPIC. LEGENDARY falls only from the Herald;
+  // GODFORGED only from Blaze-class capitals in deeper skies.
+  if (method === 'POST' && p === '/api/deck/grant-galactic') {
+    const f = await bodyJson(req).catch(() => ({}));
+    if (String(f.key || '') !== ADMIN_KEY) return sendJson(res, { error: 'wrong key' }, 403);
+    const target = state.players[String(f.playerId || '')];
+    if (!target || !target.email) return sendJson(res, { error: 'no such member fighter' }, 404);
+    ensurePlayer(target);
+    const rng = () => crypto.randomInt(0, 281474976710655) / 281474976710655;
+    const slots = game.GEAR_SLOTS.filter(s => s !== 'god');
+    const slot = slots[Math.floor(rng() * slots.length)];
+    const piece = game.rollGearPiece(state, rng, { slot, tier: 'EPIC' });
+    game.bankHaul(target, [piece]);
+    store.save(true);
+    return sendJson(res, {
+      grantedTo: { id: target.id, email: target.email, name: target.displayName },
+      granted: { id: piece.id, slot: piece.slot, tier: piece.tier, name: piece.name, affixes: (piece.affixes || []).map(a => a.label) },
+      galactic: game.galacticRecord(target)
+    });
+  }
+
   return sendHtml(res, views.shell('Not found', '<section class="authbox"><h1>Nothing stands here.</h1><p><a href="/">Back to the arena door</a></p></section>', me), 404);
 }
 

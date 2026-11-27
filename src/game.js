@@ -1815,7 +1815,7 @@ const GALACTIC_CAPITAL = {
 const GALACTIC_SECTORS = [
   {
     id: 1, name: 'EMBERFALL REACH', playable: true, capital: GALACTIC_CAPITAL,
-    story: 'The first sky she took. Emberfall is where the armada learned to fly in formation — pickets on the rim, patrols in the lanes, Mirage wings in the dark between, and the Herald above it all, announcing her.'
+    story: 'The first sky she took. Emberfall is where the armada learned to fly in formation — pickets on the rim, patrols in the lanes, Mirage wings in the dark between, and the Herald above it all, announcing her. Every hull out there is a system with a gate: this sector is a network, and taking it is an intrusion flown at fleet scale.'
   },
   {
     id: 2, name: 'THE LEDGER MARCHES', playable: false, capital: { id: 'ledger', name: 'THE LEDGER' },

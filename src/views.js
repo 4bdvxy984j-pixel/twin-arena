@@ -1019,7 +1019,7 @@ function galacticPage(state, me) {
       <div><span class="g-kicker">THE TWIN ARENA · THEATER III</span><h1>THE GALACTIC</h1></div>
       <div class="gtop-meta"><span>SECTOR 1 · ARMADA PRESENCE: FLARE</span><a href="/">← the Arena door</a></div>
     </div>
-    <p class="glede">The Twin's war has left the cathedral and taken the sky. Your fighter is a ship now — same build, same levels, same mind hunting you. Everything you ever earned flies with you.</p>
+    <p class="glede">The Twin's war has left the cathedral and taken the sky. Your fighter is a ship now — same build, same levels, same mind hunting you. Everything you ever earned flies with you. And make no mistake about the trade being taught up here: her ships are systems, their hulls are gates, and every sortie is a breach attempt — recon, flood, stealth and decoy, flown against a defender who learns.</p>
     ${bannersHtml(state)}
     <div class="gmap" role="navigation" aria-label="Star map of the armada's sectors">
       <div class="gnebula n1"></div><div class="gnebula n2"></div><div class="gnebula n3"></div>
@@ -1033,6 +1033,7 @@ function galacticPage(state, me) {
     <div class="panel">
       <h2>How the sky works</h2>
       <ol class="how">
+        <li><strong>The sky is a school for intruders.</strong> This theater is a hacking war at fleet scale, and it teaches the real thinking: Probe is recon — mark the system before you touch it. Flood is the battering ram. Whisper is stealth, Decoy is misdirection, and Attention is trace discipline — how loud you fly is how fast she finds you. A sector is a network; clearing it is an intrusion end to end.</li>
         <li><strong>Your build is your ship.</strong> Tools become weapons systems with identical referee math; worn gear rides the hull and sets its trim; fitted mods are hardpoints; the Mod Rail is your systems row, and its deployables fire in space exactly as in the Arena.</li>
         <li><strong>One pool, one mind.</strong> XP, levels and weight class are shared across every theater. Her global learning ticks from galactic fights at the Arena rate — a counter she evolves against you anywhere is waiting everywhere.</li>
         <li><strong>The Trace is Armada Attention here.</strong> The more you fight in a sector, the more its armada has read you — sector familiarity that sharpens its counters, filed per sector. It decays when you hunt in other theaters. Your Arena habits pre-read you at +10%, capped low.</li>
@@ -1050,7 +1051,7 @@ function galacticFlyPage(state, me) {
     <div class="gfly-hero">
       <span class="g-kicker">SECTOR 1 · EMBERFALL REACH</span>
       <h1>FLY THE SORTIE</h1>
-      <p class="lede">Eight encounters between you and the Herald. Your ship is your build — weapons, hull, hardpoints, systems row — and the armada is reading you the whole way out.</p>
+      <p class="lede">Eight systems between you and the Herald — each one a gate with guns. Your ship is your build — weapons, hull, hardpoints, systems row — and the armada is reading you the whole way in: every breach you fly teaches the network your shape.</p>
     </div>`;
   if (!me || !me.email) {
     const body = `<section class="descent-wrap">${hero}
@@ -1208,6 +1209,20 @@ function deckPage(state, opts) {
   const key = opts.key || '';
   const keyField = key ? `<input type="hidden" name="key" value="${esc(key)}">` : '';
   const m = educationMeter(state);
+  const gt = state.galactic || { sorties: 0, withdrawals: 0, deaths: 0, turned: 0, encountersCleared: 0, capitalsSlain: 0, legendaries: 0, firstClear: {} };
+  const gfc = (gt.firstClear || {})['1'];
+  let sectorShapes = 0;
+  for (const p of Object.values(state.players)) {
+    const sec = p.galactic && p.galactic.sectors && p.galactic.sectors['1'];
+    if (sec && sec.shapes) for (const k of Object.keys(sec.shapes)) sectorShapes += sec.shapes[k];
+  }
+  const captains = Object.values(state.players)
+    .filter(p => p.email && p.galactic && game.galacticRecord(p).sorties > 0)
+    .sort((a, b) => (game.galacticRecord(b).capitalsSlain - game.galacticRecord(a).capitalsSlain) || (game.galacticRecord(b).deepest - game.galacticRecord(a).deepest));
+  const captainRows = captains.map(p => {
+    const r = game.galacticRecord(p);
+    return `<li class="railitem"><span class="railname">${esc(p.displayName || 'Captain')}</span><span class="railres">${r.sorties} sorties · deepest Enc. ${r.deepest || '—'} · ${r.capitalsSlain} capitals${r.cleared['1'] ? ' · ★ cleared ' + new Date(r.cleared['1'].firstAt).toISOString().slice(0, 10) : ''}</span><span class="railtime">${esc(p.id)}</span></li>`;
+  }).join('') || '<li class="railitem">No captain has flown a sortie yet.</li>';
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const t0 = today.getTime();
   // Today's tallies come from the verdict ledger (complete), not the capped rail.
@@ -1266,6 +1281,34 @@ function deckPage(state, opts) {
       <ul class="rail" id="w-rail">${rail}</ul>
       <h3>Top of the leaderboard</h3>
       <ul class="board">${board}</ul>
+    </div>
+
+    <div class="deckpanel wall">
+      <h2>🛰 THE GALACTIC — SECTOR COMMAND</h2>
+      <div class="wallstats">
+        <div><strong>${gt.sorties}</strong><span>sorties flown</span></div>
+        <div><strong>${gt.encountersCleared}</strong><span>encounters cleared</span></div>
+        <div><strong>${gt.capitalsSlain}</strong><span>capitals slain</span></div>
+        <div><strong>${gt.legendaries || 0}</strong><span>legendary banked</span></div>
+      </div>
+      <div class="wallstats tally">
+        <div><strong>${gt.withdrawals}</strong><span>withdrawals</span></div>
+        <div><strong>${gt.deaths}</strong><span>ships destroyed</span></div>
+        <div><strong>${gt.turned}</strong><span>turned back</span></div>
+        <div><strong>${sectorShapes}</strong><span>sector-1 shapes read</span></div>
+      </div>
+      <p>SECTOR 1 · EMBERFALL REACH — ${gfc ? `★ FIRST CLEARED BY <strong>${esc(gfc.name)}</strong> · ${new Date(gfc.at).toISOString().slice(0, 10)} — the receipt stands in the books.` : '★ UNCLEARED — the Herald still holds the Reach, and the first-clear receipt is unwritten.'} Sectors 2–5 stand locked for their own campaigns; the dueling field stays sealed until Phase G3.</p>
+      <p class="dim">Her one mind, two webs: <strong>${m.shapes}</strong> shapes in the global web, <strong>${sectorShapes}</strong> in the Sector 1 web. Galactic fights feed both; the sector web cools whenever a captain hunts in another theater.</p>
+      <h3>Captains of the Reach</h3>
+      <ul class="rail">${captainRows}</ul>
+      <h3>Grant a capital-table drop</h3>
+      ${opts.admin ? `<form class="deckform" id="ggrant-form">
+          <label>Captain's fighter id (from the roster above)<input name="playerId" type="text" placeholder="fighter id" required></label>
+          <button class="bigbtn" type="submit">🛰 GRANT THE DROP</button>
+          <p class="dim" id="ggrant-result"></p>
+        </form>
+        <p class="dim">One EPIC piece off the Herald's table, banked to their satchel through the same books a capital kill pays through. The deck never mints numbered steel: LEGENDARY falls only from the Herald, GODFORGED only from Blaze-class capitals in deeper skies — the grant-gear fence, unchanged.</p>`
+      : '<p class="dim">Grants answer to the admin key (break-glass) — the same fence as grant-gear and grant-mods. You came in on your Member Key: the readouts above are yours, the mint is not.</p>'}
     </div>
 
     <div class="deckgrid">
@@ -1348,6 +1391,22 @@ function deckPage(state, opts) {
   </section>
   <script>
   // The wall stays live: poll the public state and refresh meter + rail.
+  (function () {
+    var gf = document.getElementById('ggrant-form');
+    if (gf) gf.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById('ggrant-result');
+      var pid = gf.querySelector('input[name="playerId"]').value.trim();
+      out.textContent = 'Granting…';
+      fetch('/api/deck/grant-galactic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: ${JSON.stringify(key)}, playerId: pid }) })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.error) { out.textContent = 'Refused: ' + d.error; return; }
+          out.textContent = 'Granted to ' + d.grantedTo.name + ': ' + d.granted.tier + ' ' + d.granted.name + ' (' + d.granted.slot + ') — banked in their satchel.';
+        })
+        .catch(function () { out.textContent = 'The grant did not land — try again.'; });
+    });
+  })();
   (function () {
     var fmt = function (s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
     setInterval(function () {

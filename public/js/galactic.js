@@ -147,8 +147,8 @@
   }
   function showBossPlate(boss) {
     if (!bossplateEl) return;
-    bossplateEl.innerHTML = '<div class="bossplate-inner"><span class="boss-tag">THE CAPITAL OF THE REACH</span>' +
-      '<h2>' + esc(boss.name) + '</h2><p>' + esc(boss.line) + '</p></div>';
+    bossplateEl.innerHTML = '<div class="bossplate-inner"><span class="boss-tag">THE CAPITAL OF THE REACH — FLAGSHIP SYSTEM</span>' +
+      '<h2>' + esc(boss.name) + '</h2><p>' + esc(boss.line) + '</p><p class="boss-sub">BREACH IT, AND THE SECTOR IS YOURS</p></div>';
     bossplateEl.classList.remove('hidden');
     setTimeout(function () { bossplateEl.classList.add('hidden'); }, 5200);
   }
