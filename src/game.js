@@ -1195,6 +1195,8 @@ function settleFight(state, player, fight, submission) {
     player.record.streak = player.record.streak < 0 ? player.record.streak - 1 : -1;
   }
   player.lastFightAt = Date.now();
+  // THE GALACTIC: hunting in the Arena cools the armada's attention.
+  decayGalacticAttention(player);
 
   // XP: the progression track. Flat line for the fight, plus a bonus for
   // teaching the Twin shapes it did not know from you. A Founder's Ember
@@ -1344,6 +1346,8 @@ function settlePitFight(state, challenger, owner, fight, submission, sim, rng) {
   const levelBefore = levelForXp(challenger.xp || 0);
   challenger.xp = (challenger.xp || 0) + xpGain;
   challenger.lastFightAt = Date.now();
+  // THE GALACTIC: hunting in the Pit cools the armada's attention.
+  decayGalacticAttention(challenger);
 
   let topShape = null, topN = 0;
   for (const [k, v] of Object.entries(patterns)) if (v > topN) { topN = v; topShape = k; }
@@ -1741,6 +1745,8 @@ function finishDescentRun(state, player, run, how) {
   const levelBefore = levelForXp(player.xp || 0);
   player.xp = (player.xp || 0) + xpGain;
   player.lastFightAt = Date.now();
+  // THE GALACTIC: hunting in the Descent cools the armada's attention.
+  decayGalacticAttention(player);
   player.descent = player.descent || { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 };
   player.descent.runs += 1;
   player.descent.deepest = Math.max(player.descent.deepest || 0, run.deepest || run.depthsCleared);
@@ -1785,6 +1791,308 @@ function finishDescentRun(state, player, run, how) {
   return verdict;
 }
 
+// ===========================================================================
+// THE GALACTIC — G1 "THE THEATER": the Twin's war takes the sky.
+// One fighter, one build, one XP pool, one mind: a captain's tools become
+// weapons systems with IDENTICAL referee math (effectiveStats deals them),
+// worn gear rides the hull, fitted mods are hardpoints, the Mod Rail is the
+// systems row, and the Trace reads as ARMADA ATTENTION — sector-level
+// familiarity, kept per sector on the captain's own record, fed by the same
+// pattern extraction that teaches the house Twin. Her global learning
+// (shapesGlobal, globalArmor, grudge armor) ticks from galactic fights at
+// exactly the Arena rate: she is one opponent, in every theater.
+// ===========================================================================
+
+// Sector 1's capital. The sketch names the capitals of Sectors 2, 3 and 5
+// (THE LEDGER, THE CHOIR, THE UNDERTAKER'S HEIR) and holds them for their
+// own sectors — Sector 1's flagship is named here in the same family: THE
+// HERALD, the voice that announces the armada. Its gimmick is a gentle
+// Accountant flavor: its glances hunt the tool this SORTIE leans on.
+const GALACTIC_CAPITAL = {
+  id: 'herald', name: 'THE HERALD',
+  line: 'The voice of the Reach. It has announced every fleet you have met so far — and its glances hunt the weapon this sortie leans on, because it has been listening to you announce yourself.'
+};
+const GALACTIC_SECTORS = [
+  {
+    id: 1, name: 'EMBERFALL REACH', playable: true, capital: GALACTIC_CAPITAL,
+    story: 'The first sky she took. Emberfall is where the armada learned to fly in formation — pickets on the rim, patrols in the lanes, Mirage wings in the dark between, and the Herald above it all, announcing her.'
+  },
+  {
+    id: 2, name: 'THE LEDGER MARCHES', playable: false, capital: { id: 'ledger', name: 'THE LEDGER' },
+    story: 'An Accountant-class dreadnought keeps these books. Every repeated action is entered, priced, and taxed with interest.',
+    lockedReason: 'Held for the next campaign — the theater opens sector by sector, and Emberfall flies first.'
+  },
+  {
+    id: 3, name: 'THE CHOIR DARK', playable: false, capital: { id: 'choir', name: 'THE CHOIR' },
+    story: 'A Whisper-hulled capital fights nearly invisible here. Captains fly by Probe marks and muzzle shimmer, or they do not fly home.',
+    lockedReason: 'Held for the next campaign — the theater opens sector by sector, and Emberfall flies first.'
+  },
+  {
+    id: 4, name: 'THE UNCHARTED DEEP', playable: false, capital: null,
+    story: 'The charts name no capital here yet. Something holds this sky; the armada does not say what.',
+    lockedReason: 'Uncharted — no captain has flown far enough to draw this part of the sky.'
+  },
+  {
+    id: 5, name: "THE UNDERTAKER'S ROAD", playable: false, capital: { id: 'heir', name: "THE UNDERTAKER'S HEIR" },
+    story: 'It buries your strongest system first: your most-used weapon is seized at the fight\u2019s open, and won back — twinned — only by beating the Heir without it.',
+    lockedReason: 'Held for the next campaign — the road to the Heir opens when the nearer skies are flown.'
+  }
+];
+// One sortie through Sector 1: eight encounters, escalating across the
+// tiers the sector holds (the sketch's fleet table, Sector 1's share of
+// it — Battle Groups and Dreadnought Fleets belong to later sectors).
+const GALACTIC_LADDER = ['pickets', 'pickets', 'patrols', 'squadrons', 'patrols', 'squadrons', 'squadrons', 'capital'];
+const GALACTIC_TIERS = {
+  pickets:   { tier: 'Pickets',   className: 'Spark', label: 'PICKET FRIGATE',    gateHp: 100, roundMs: 120000, intervalMult: 1.00, aggr: 1.00, feints: false },
+  patrols:   { tier: 'Patrols',   className: 'Ember', label: 'PATROL PAIR',       gateHp: 120, roundMs: 120000, intervalMult: 0.95, aggr: 1.08, feints: false },
+  squadrons: { tier: 'Squadrons', className: 'Flare', label: 'MIRAGE WING',       gateHp: 138, roundMs: 135000, intervalMult: 0.90, aggr: 1.16, feints: true },
+  capital:   { tier: 'Capital',   className: 'Flare', label: 'CAPITAL SHIP',      gateHp: 185, roundMs: 150000, intervalMult: 0.85, aggr: 1.25, feints: true }
+};
+function galacticEncounter(n) {
+  if (!Number.isInteger(n) || n < 1 || n > GALACTIC_LADDER.length) return null;
+  const kind = GALACTIC_LADDER[n - 1];
+  const t = GALACTIC_TIERS[kind];
+  return { n, kind, tier: t.tier, className: t.className, label: t.label };
+}
+// `cleared` is the sector-clear notch: once a captain has taken the Reach,
+// its armada flies a permanent notch quieter for them — the map remembers
+// who won (the sketch's clearing law), and cleared sectors stay farmable.
+function galacticEncounterParams(n, cleared) {
+  const enc = galacticEncounter(n);
+  if (!enc) return null;
+  const t = GALACTIC_TIERS[enc.kind];
+  return {
+    kind: enc.kind, tier: enc.tier, className: enc.className, label: enc.label,
+    gateHp: t.gateHp + (enc.kind === 'capital' ? 0 : (n - 1) * 4),
+    roundMs: t.roundMs, intervalMult: t.intervalMult,
+    aggression: +(t.aggr * (cleared ? 0.9 : 1)).toFixed(3),
+    feints: t.feints
+  };
+}
+// The armada's strike schedule: same STRIKE law as every theater, seeded,
+// deterministic. Squadrons and the capital seed MIRAGE feints (the Pit's
+// Flare law, in space — false sensor ships on the same dealt schedule).
+// The Herald's glances hunt the tool this sortie leans on.
+function makeGalacticStrikes(seed, n, roundMs, ctx) {
+  ctx = ctx || {};
+  const params = galacticEncounterParams(n, !!ctx.cleared);
+  if (!params) return [];
+  const rnd = rng32(seed);
+  const interval = (STRIKE.baseMs / params.aggression) * params.intervalMult;
+  const strikes = [];
+  let t = STRIKE.firstMs + (rnd() - 0.5) * 1200;
+  let i = 0;
+  while (t < roundMs - 1200 && strikes.length < 80) {
+    const kind = STRIKE.cycle[i % STRIKE.cycle.length];
+    const s = { at: Math.round(t), kind };
+    if (kind === 'glance') {
+      s.tool = (params.kind === 'capital' && ctx.sortieTool) ? ctx.sortieTool
+        : TOOL_IDS[Math.floor(rnd() * TOOL_IDS.length)];
+    }
+    strikes.push(s);
+    t += interval + (rnd() - 0.5) * 1600;
+    i++;
+  }
+  if (params.feints) {
+    const want = 2 + Math.floor(rnd() * 3);
+    let placed = 0;
+    for (let attempt = 0; attempt < 60 && placed < want; attempt++) {
+      const ft = 3000 + Math.floor(rnd() * Math.max(1000, roundMs - 6000));
+      if (strikes.some(s => Math.abs(s.at - ft) < 1800)) continue;
+      strikes.push({ at: ft, kind: 'feint' });
+      placed++;
+    }
+    strikes.sort((a, b) => a.at - b.at);
+  }
+  return strikes;
+}
+// XP at the Descent's step: per encounter cleared, a capital bonus on top.
+const GALACTIC_XP = { perEncounter: 18, capital: 25 };
+// Mod drops in space: rolled after the gear from the same seeded rng, the
+// Descent's discipline — banked on the spot, death cannot take them.
+MOD_DROPS.galactic = {
+  pickets:   { fitted: 0.10, deploy: 0 },
+  patrols:   { fitted: 0.16, deploy: 0.08 },
+  squadrons: { fitted: 0.22, deploy: 0.12 },
+  capital:   { fitted: 0.35, deploy: 0.25 }
+};
+function rollGalacticMods(rng, player, kind) {
+  const table = MOD_DROPS.galactic[kind];
+  if (!table) return [];
+  const out = [];
+  if (rng() < table.fitted) { const id = rollModDrop(rng, player, 'fitted'); if (id) out.push({ id, kind: 'fitted' }); }
+  if (table.deploy && rng() < table.deploy) { const id = rollModDrop(rng, player, 'deploy'); if (id) out.push({ id, kind: 'deployable' }); }
+  return out;
+}
+// ---- Armada attention: the Trace, wearing a sector's sky -----------------
+function galacticRecord(player) {
+  if (!player) return null;
+  if (!player.galactic) {
+    player.galactic = { sorties: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, capitalsSlain: 0, cleared: {}, sectors: {} };
+  }
+  if (!player.galactic.cleared) player.galactic.cleared = {};
+  if (!player.galactic.sectors) player.galactic.sectors = {};
+  return player.galactic;
+}
+function galacticSectorShapes(player, sectorId) {
+  const rec = galacticRecord(player);
+  if (!rec) return {};
+  const key = String(sectorId);
+  if (!rec.sectors[key]) rec.sectors[key] = { shapes: {}, lastAt: 0 };
+  if (!rec.sectors[key].shapes) rec.sectors[key].shapes = {};
+  return rec.sectors[key].shapes;
+}
+// The familiarity map dealt into a galactic fight: the sector's own memory
+// of this captain, PLUS the Arena's pre-read at +10% (the sketch's cap —
+// theater-hopping is never punished hard). effectiveStats weights whatever
+// map it is handed exactly as it weights the fighter's own lessons, so the
+// referee math is the Arena's math, unchanged.
+function galacticFamShapes(player, sectorId) {
+  const sector = galacticSectorShapes(player, sectorId);
+  const merged = {};
+  for (const k of Object.keys(sector)) merged[k] = sector[k];
+  const arena = (player && player.shapes) || {};
+  for (const k of Object.keys(arena)) merged[k] = (merged[k] || 0) + arena[k] * 0.1;
+  return merged;
+}
+// Attention as one honest number for the command strip: the mean tool
+// familiarity this sector holds on the captain, as a percent of the cap.
+function galacticAttention(state, player, sectorId) {
+  if (!player) return 0;
+  const famShapes = galacticFamShapes(player, sectorId);
+  let sum = 0;
+  for (const id of TOOL_IDS) {
+    const parts = familiarityParts(state, player, id, famShapes);
+    sum += Math.min(0.75, parts.global + parts.personal);
+  }
+  return Math.round((sum / TOOL_IDS.length) / 0.75 * 100);
+}
+// The lesson of a galactic fight, filed where galactic lessons live: the
+// patterns go to the SECTOR's memory of this captain (attention), while
+// the world lesson — shapesGlobal, globalArmor, grudge armor, career
+// tallies — is written exactly as teachFromActions writes it. One mind.
+function teachGalactic(state, player, sectorId, actions) {
+  const patterns = extractPatterns(actions || []);
+  const learnMult = (has(player, 'dec1') ? 0.7 : 1) * (state.config.learningSpeed || 1);
+  const sectorShapes = galacticSectorShapes(player, sectorId);
+  const newToWorld = [], newToSector = [];
+  for (const k of Object.keys(patterns)) {
+    if (!state.shapesGlobal[k]) newToWorld.push(k);
+    if (!sectorShapes[k]) newToSector.push(k);
+    state.shapesGlobal[k] = (state.shapesGlobal[k] || 0) + patterns[k] * learnMult;
+    sectorShapes[k] = (sectorShapes[k] || 0) + patterns[k] * learnMult;
+  }
+  const rec = galacticRecord(player);
+  if (rec && rec.sectors[String(sectorId)]) rec.sectors[String(sectorId)].lastAt = Date.now();
+  const toolUse = {};
+  for (const a of actions || []) if (a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:') && !String(a.tool || '').startsWith('mod:')) toolUse[a.tool] = (toolUse[a.tool] || 0) + 1;
+  player.toolUse = player.toolUse || {};
+  for (const [tool, n] of Object.entries(toolUse)) player.toolUse[tool] = (player.toolUse[tool] || 0) + n;
+  const ranked = Object.entries(toolUse).sort((a, b) => b[1] - a[1]);
+  const armorGains = {};
+  if (ranked[0]) armorGains[ranked[0][0]] = 0.05;
+  if (ranked[1]) armorGains[ranked[1][0]] = 0.025;
+  for (const [tool, gain] of Object.entries(armorGains)) {
+    player.twinArmor[tool] = Math.min(0.45, (player.twinArmor[tool] || 0) + gain);
+    state.globalArmor[tool] = Math.min(0.2, (state.globalArmor[tool] || 0) + 0.002);
+  }
+  return { patterns, newToPlayer: newToSector, newToWorld, toolUse };
+}
+// Attention decays when the captain hunts ELSEWHERE: every settled fight
+// in another theater cools every sector's memory of them by 5%. Called
+// from settleFight, settlePitFight and finishDescentRun — never from a
+// galactic settle, where the hunting is here.
+function decayGalacticAttention(player) {
+  if (!player || !player.galactic || !player.galactic.sectors) return;
+  for (const key of Object.keys(player.galactic.sectors)) {
+    const shapes = player.galactic.sectors[key] && player.galactic.sectors[key].shapes;
+    if (!shapes) continue;
+    for (const k of Object.keys(shapes)) {
+      shapes[k] = +(shapes[k] * 0.95).toFixed(4);
+      if (shapes[k] < 0.05) delete shapes[k];
+    }
+  }
+}
+// Settle a whole sortie at its end (sector cleared / withdrew / destroyed /
+// turned back). Same banking law as the Descent: death loses the unbanked
+// STURDY and RARE; EPIC and above always come home. XP pays once, the
+// Founder's Ember +10% rides, and a capital kill writes the sector-clear
+// receipt — the captain's own record, and the world's first-clear book,
+// named and dated and permanent.
+function finishGalacticSortie(state, player, sortie, how) {
+  sortie.over = true;
+  let banked = [], lost = [];
+  if (how === 'death') { const split = deathSplit(sortie.haul); banked = split.keep; lost = split.lost; }
+  else banked = (sortie.haul || []).slice();
+  bankHaul(player, banked);
+  state.galactic = state.galactic || { sorties: 0, withdrawals: 0, deaths: 0, turned: 0, encountersCleared: 0, capitalsSlain: 0, legendaries: 0, firstClear: {} };
+  if (!state.galactic.firstClear) state.galactic.firstClear = {};
+  for (const p of banked) if (p.tier === 'LEGENDARY') state.galactic.legendaries = (state.galactic.legendaries || 0) + 1;
+  const value = haulValue(banked) + (sortie.bankedValue || 0);
+  const points = (sortie.encountersCleared || 0) * 10 + (sortie.capitalsSlain || 0) * 15;
+  player.points += points;
+  let xpGain = sortie.xp || 0;
+  const emberBonus = !!founderSerial(player);
+  if (emberBonus) xpGain = Math.floor(xpGain * FOUNDER_XP_MULT);
+  const levelBefore = levelForXp(player.xp || 0);
+  player.xp = (player.xp || 0) + xpGain;
+  player.lastFightAt = Date.now();
+  const rec = galacticRecord(player);
+  rec.sorties += 1;
+  rec.deepest = Math.max(rec.deepest || 0, sortie.deepest || sortie.encountersCleared || 0);
+  rec.bestScore = Math.max(rec.bestScore || 0, sortie.score || 0);
+  rec.bestHaul = Math.max(rec.bestHaul || 0, value);
+  rec.capitalsSlain = (rec.capitalsSlain || 0) + (sortie.capitalsSlain || 0);
+  if (how === 'death') rec.deaths = (rec.deaths || 0) + 1;
+  let firstClear = false;
+  if (sortie.sectorCleared) {
+    const key = String(sortie.sectorId || 1);
+    if (!rec.cleared[key]) { rec.cleared[key] = { firstAt: Date.now(), clears: 0 }; firstClear = true; }
+    rec.cleared[key].clears += 1;
+    if (!state.galactic.firstClear[key]) {
+      state.galactic.firstClear[key] = { playerId: player.id, name: player.displayName || 'A fighter', at: Date.now() };
+    }
+  }
+  state.galactic.sorties += 1;
+  state.galactic.encountersCleared += sortie.encountersCleared || 0;
+  state.galactic.capitalsSlain += sortie.capitalsSlain || 0;
+  if (how === 'death') state.galactic.deaths += 1;
+  else if (how === 'withdraw') state.galactic.withdrawals += 1;
+  else if (how === 'turned') state.galactic.turned += 1;
+  const secs = Math.max(1, Math.round((Date.now() - (sortie.startedAt || Date.now())) / 1000));
+  const verdict = {
+    id: sortie.id, fighterId: player.id,
+    fighterName: player.displayName || 'A fighter',
+    mode: 'galactic',
+    result: how === 'death' ? 'lose' : 'win',
+    endReason: how, secs, points,
+    xp: xpGain, emberBonus,
+    level: levelForXp(player.xp), levelUp: levelForXp(player.xp) > levelBefore,
+    shapesTaught: [], shapesTaughtCount: 0, newToWorldCount: 0, armorGains: {},
+    fightStats: null,
+    galactic: {
+      sector: sortie.sectorId || 1,
+      encountersCleared: sortie.encountersCleared || 0,
+      deepest: sortie.deepest || sortie.encountersCleared || 0,
+      score: sortie.score || 0,
+      capitalsSlain: sortie.capitalsSlain || 0,
+      sectorCleared: !!sortie.sectorCleared,
+      firstClear,
+      haulValue: value,
+      banked: banked.map(p => ({ name: p.name, tier: p.tier, slot: p.slot, serial: p.serial || null })),
+      lost: lost.map(p => ({ name: p.name, tier: p.tier, slot: p.slot }))
+    },
+    at: Date.now()
+  };
+  state.verdicts[sortie.id] = verdict;
+  state.fights.unshift({
+    id: sortie.id, name: verdict.fighterName, result: verdict.result, how,
+    secs, shapes: 0, mode: 'galactic', at: verdict.at
+  });
+  state.fights = state.fights.slice(0, 60);
+  return verdict;
+}
+
 function educationMeter(state) {
   const shapes = Object.keys(state.shapesGlobal).length;
   const fighters = Object.values(state.players).filter(p => p.record && p.record.bouts > 0).length;
@@ -1817,5 +2125,9 @@ module.exports = {
   deathSplit, bankHaul, wearGear, unwearGear,
   GODFORGED, godforgedChance, rollGodforged, spendGodCharge,
   BOSSES, descentKind, bossForDepth, descentDepthParams, descentBuildFam,
-  makeDescentStrikes, DESCENT_XP, teachFromActions, finishDescentRun
+  makeDescentStrikes, DESCENT_XP, teachFromActions, finishDescentRun,
+  GALACTIC_SECTORS, GALACTIC_CAPITAL, GALACTIC_LADDER, GALACTIC_TIERS, GALACTIC_XP,
+  galacticEncounter, galacticEncounterParams, makeGalacticStrikes,
+  galacticRecord, galacticSectorShapes, galacticFamShapes, galacticAttention,
+  teachGalactic, decayGalacticAttention, rollGalacticMods, finishGalacticSortie
 };

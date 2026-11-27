@@ -17,7 +17,7 @@ function shell(title, body, me) {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<!-- twin-arena build: 2026.11.27-persistence -->
+<!-- twin-arena build: 2026.11.27-galactic -->
 <title>${esc(title)} — THE TWIN ARENA</title>
 <link rel="stylesheet" href="/css/style.css">
 <script src="/js/sfx.js"></script>
@@ -26,7 +26,7 @@ ${EMBERS_HTML}
 <header class="topbar">
   <a class="brand" href="/"><span class="brandmark">◐</span> THE TWIN ARENA</a>
   <button id="navtoggle" class="navtoggle" type="button" aria-expanded="false" aria-controls="topnav" aria-label="Open the menu">☰</button>
-  <nav id="topnav"><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/descent">The Descent</a><a href="/web">Evolution</a>${who}<button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
+  <nav id="topnav"><a href="/arena">Fight</a><a href="/pit">The Pit</a><a href="/descent">The Descent</a><a href="/galactic">The Galactic</a><a href="/web">Evolution</a>${who}<button id="soundbtn" class="ghostbtn soundbtn" type="button">Sound: on</button></nav>
 </header>
 <main>${body}</main>
 <footer class="foot">
@@ -145,6 +145,13 @@ function armoryHtml(p) {
 }
 
 function railText(f) {
+  if (f.mode === 'galactic') {
+    if (f.how === 'cleared') return 'cleared a sector of the Reach';
+    if (f.how === 'death') return 'was destroyed in the Reach';
+    if (f.how === 'withdraw') return 'withdrew from the Reach';
+    if (f.how === 'void') return 'had a sortie voided';
+    return 'was turned back in the Reach';
+  }
   if (f.mode === 'descent') {
     if (f.how === 'death') return 'died in the Descent';
     if (f.how === 'ascend') return 'ascended from the deep';
@@ -206,6 +213,19 @@ function landing(state, me) {
       <ul class="board">${topScore.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${drec(p).bestScore} pts</span></a></li>`).join('') || '<li class="dim">No scored run yet.</li>'}</ul>
       <h3 class="boardh">Richest haul banked</h3>
       <ul class="board">${topHaul.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${drec(p).bestHaul}</span></a></li>`).join('') || '<li class="dim">No haul banked yet.</li>'}</ul>`;
+  const gtally = state.galactic || { sorties: 0, withdrawals: 0, deaths: 0, turned: 0, encountersCleared: 0, capitalsSlain: 0, legendaries: 0, firstClear: {} };
+  const gplayers = Object.values(state.players).filter(x => x.email && x.galactic);
+  const grec2 = x => game.galacticRecord(x);
+  const topReach = gplayers.filter(x => grec2(x).deepest > 0).sort((a, b) => grec2(b).deepest - grec2(a).deepest).slice(0, 5);
+  const topSortie = gplayers.filter(x => grec2(x).bestScore > 0).sort((a, b) => grec2(b).bestScore - grec2(a).bestScore).slice(0, 5);
+  const fc1 = (gtally.firstClear || {})['1'];
+  const galacticBoards = `
+      <h2 class="mt">The Galactic — sortie boards</h2>
+      <p class="dim">${gtally.sorties} sorties flown · ${gtally.encountersCleared} encounters cleared · ${gtally.capitalsSlain} capitals slain · ${gtally.legendaries || 0} LEGENDARY pieces banked from the sky. ${fc1 ? `★ <strong>Sector 1 was first cleared by ${esc(fc1.name)}</strong> — receipted in the books, named and dated.` : '★ Sector 1 — Emberfall Reach — stands <strong>uncleared</strong>. Its capital, THE HERALD, is waiting.'} <a href="/galactic">Take the sky →</a></p>
+      <h3 class="boardh">Deepest into the Reach</h3>
+      <ul class="board">${topReach.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">Encounter ${grec2(p).deepest}</span></a></li>`).join('') || '<li class="dim">No captain has flown yet.</li>'}</ul>
+      <h3 class="boardh">Highest sortie score</h3>
+      <ul class="board">${topSortie.map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${grec2(p).bestScore} pts</span></a></li>`).join('') || '<li class="dim">No scored sortie yet.</li>'}</ul>`;
   const body = `
   <section class="hero">
     <div class="hero-gate" aria-hidden="true"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="eye"></div></div>
@@ -213,6 +233,7 @@ function landing(state, me) {
     <p class="lede">You are inside the system; the Twin is its guardian. Every trick you throw becomes a shape it knows —
     and it throws back: parry its haymakers, mind your trace, crack the gate before it throws you out or runs you down.</p>
     <a class="fightbtn" href="/arena">⚔&nbsp; FIGHT THE TWIN</a>
+    <a class="ghostbtn herobtn" href="/galactic">🚀&nbsp; THE GALACTIC — HER ARMADA HOLDS THE SKY</a>
     <div class="meter" id="meter">
       <div><strong id="m-shapes">${m.shapes}</strong><span>shapes learned</span></div>
       <div><strong id="m-fighters">${m.fighters}</strong><span>fighters taught it</span></div>
@@ -231,6 +252,7 @@ function landing(state, me) {
       <ul class="board">${board}</ul>
       ${pitBoards}
       ${descentBoards}
+      ${galacticBoards}
       <h2 class="mt">How it works</h2>
       <ol class="how">
         <li><strong>Fight.</strong> Four tools, one gate, two and a half minutes — and the gate fights back. It strikes on a rhythm: parry the haymaker when it winds up and the gate hangs open, vulnerable.</li>
@@ -632,6 +654,13 @@ const VERDICT_TITLES = {
   void: 'BOUT VOIDED'
 };
 function verdictTitle(v) {
+  if (v.mode === 'galactic') {
+    if (v.endReason === 'cleared') return 'SECTOR CLEARED — THE HERALD FALLS';
+    if (v.endReason === 'death') return 'DESTROYED IN THE REACH';
+    if (v.endReason === 'void') return 'SORTIE VOIDED';
+    if (v.endReason === 'withdraw') return 'WITHDREW — THE HAUL IS YOURS';
+    return 'TURNED BACK FROM THE REACH';
+  }
   if (v.mode === 'descent') {
     if (v.endReason === 'death') return 'THE DARK KEPT YOU';
     if (v.endReason === 'ascend') return 'YOU ASCENDED — THE HAUL IS YOURS';
@@ -656,6 +685,12 @@ function verdictPage(state, v, me) {
       ${v.descent.banked && v.descent.banked.length ? `<p>Banked into the satchel (haul value ${v.descent.haulValue}): ${v.descent.banked.map(bp => `<span class="tierbadge t-${bp.tier.toLowerCase()}">${esc(bp.name)} (${bp.tier}${bp.serial ? ' No. ' + bp.serial : ''})</span>`).join(' ')}</p>` : `<p>Nothing banked — the haul was empty when the run ended.</p>`}
       ${v.descent.lost && v.descent.lost.length ? `<p class="bad">Left in the dark: ${v.descent.lost.map(bp => `${esc(bp.name)} (${bp.tier})`).join(' · ')} — death takes the unbanked STURDY and RARE. EPIC and above always come home.</p>` : ''}
     </div>` : '';
+  const galacticLine = v.mode === 'galactic' && v.galactic ? `<div class="v-descent">
+      <p>🚀 A Galactic sortie in <strong>Sector ${v.galactic.sector} — Emberfall Reach</strong>: <strong>${v.galactic.encountersCleared}</strong> encounters cleared · deepest <strong>Encounter ${v.galactic.deepest}</strong> · score <strong>${v.galactic.score}</strong> · capitals slain <strong>${v.galactic.capitalsSlain}</strong>.</p>
+      ${v.galactic.sectorCleared ? `<p>★ <strong>SECTOR CLEARED</strong>${v.galactic.firstClear ? ' — this captain\u2019s first clearing of the Reach, receipted in the books, named and dated and permanent.' : ' — the Reach stays cleared on this captain\u2019s chart, and its armada flies a notch quieter for them now.'}</p>` : ''}
+      ${v.galactic.banked && v.galactic.banked.length ? `<p>Banked into the cargo hold (haul value ${v.galactic.haulValue}): ${v.galactic.banked.map(bp => `<span class="tierbadge t-${bp.tier.toLowerCase()}">${esc(bp.name)} (${bp.tier}${bp.serial ? ' No. ' + bp.serial : ''})</span>`).join(' ')}</p>` : `<p>Nothing banked — the hold was empty when the sortie ended.</p>`}
+      ${v.galactic.lost && v.galactic.lost.length ? `<p class="bad">Lost among the stars: ${v.galactic.lost.map(bp => `${esc(bp.name)} (${bp.tier})`).join(' · ')} — destruction takes the unbanked STURDY and RARE. EPIC and above always come home.</p>` : ''}
+    </div>` : '';
   const dropLines = (v.drops || []).map(d => {
     const it = game.ITEMS[d.item];
     if (!it) return '';
@@ -674,7 +709,7 @@ function verdictPage(state, v, me) {
     <div class="vcard ${win ? 'win' : 'lose'}">
       <div class="v-gate">◐</div>
       <h1 class="glitch">${esc(verdictTitle(v))}</h1>
-      <p class="v-name">${esc(v.fighterName)} ${v.mode === 'challenge' ? 'fought a challenged Twin' : 'faced the Twin'} · ${fmtTime(v.secs)}</p>
+      <p class="v-name">${esc(v.fighterName)} ${v.mode === 'challenge' ? 'fought a challenged Twin' : v.mode === 'galactic' ? 'flew against the Twin\u2019s armada' : v.mode === 'descent' ? 'went down into the dark' : 'faced the Twin'} · ${fmtTime(v.secs)}</p>
       ${v.voided ? `<p class="err">That bout\u2019s log did not hold up (${esc(v.voided)}) — it is remembered, but it taught nothing and earned nothing.</p>` : ''}
       <div class="v-stats">
         <div><strong>+${v.points}</strong><span>mutation points</span></div>
@@ -686,6 +721,7 @@ function verdictPage(state, v, me) {
       ${comboLine}
       ${pitLine}
       ${descentLine}
+      ${galacticLine}
       ${gearLines}
       ${dropLines}
       ${v.storm ? '<p class="v-storm">⚡ Storm verdict — points paid double under the storm.</p>' : ''}
@@ -832,6 +868,340 @@ function descentPage(state, me) {
   <script>window.TA_DESCENT = true;</script>
   <script src="/js/descent.js"></script>`;
   return shell('The Descent', body, me);
+}
+
+// ---- THE GALACTIC -------------------------------------------------------------
+// A totally different layout language: no halls, no doors in a row — a sky.
+// The star map fills the screen; sectors are places you touch; the command
+// strip rides the bottom with your ship on it. The Bridge is the fighter's
+// full profile in the theater's own dress: captain, ship, records from
+// every theater, and the whole collection — nobody flies out to check who
+// they are.
+const TIER_TRIM = { STURDY: '#cfd6dd', RARE: '#3fa9ff', EPIC: '#b967ff', LEGENDARY: '#ffd700', GODFORGED: '#fff3c4' };
+const SHIP_SLOTS = { flood: 'FLOOD CANNONS', probe: 'PROBE LANCE', whisper: 'WHISPER VANES', decoy: 'DECOY PROJECTOR', body: 'HULL PLATING' };
+let shipUid = 0;
+// The ship, composed from the build itself: hull trim from the body relic's
+// tier, every weapon mount tipped in its gear's tier color, fitted mods as
+// glowing hardpoint pips in their own colors. Code-drawn SVG — no assets.
+function shipSvg(p, big) {
+  const uid = 'sh' + (++shipUid);
+  const worn = game.wornGearMap(p || {});
+  const mods = p ? game.modSummary(p) : { fitted: {} };
+  const trim = s => worn[s] ? (TIER_TRIM[worn[s].tier] || '#8b98a9') : '#54627c';
+  const pip = (tool, x, y) => {
+    const mid = mods.fitted[tool];
+    if (!mid) return '';
+    const m = game.FITTED_MODS[mid];
+    return `<circle cx="${x}" cy="${y}" r="${big ? 7 : 5}" fill="none" stroke="${m.color}" stroke-width="2"/><text x="${x}" y="${y + 3}" text-anchor="middle" font-size="${big ? 9 : 7}" fill="${m.color}">${m.sigil}</text>`;
+  };
+  return `<svg class="ship ${big ? 'big' : 'mini'}" viewBox="0 0 340 200" role="img" aria-label="Your ship, built from your build">
+  <defs>
+    <linearGradient id="${uid}h" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232f47"/><stop offset=".55" stop-color="#131a2a"/><stop offset="1" stop-color="#0a0e18"/>
+    </linearGradient>
+    <radialGradient id="${uid}e" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ffd166"/><stop offset=".45" stop-color="#ff7a2a"/><stop offset="1" stop-color="#ff7a2a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path d="M58 62 L26 34 L96 74 Z" fill="#10182a" stroke="${trim('whisper')}" stroke-width="2"/>
+  <path d="M58 138 L26 166 L96 126 Z" fill="#10182a" stroke="${trim('whisper')}" stroke-width="2"/>
+  <ellipse cx="26" cy="100" rx="20" ry="13" fill="url(#${uid}e)" opacity=".9"/>
+  <polygon points="34,91 4,100 34,109" fill="#ffb35c"/>
+  <path d="M34 100 L112 64 Q206 48 272 72 L326 100 L272 128 Q206 152 112 136 Z" fill="url(#${uid}h)" stroke="${trim('body')}" stroke-width="${big ? 3 : 2}"/>
+  <path d="M120 78 Q200 66 262 84" fill="none" stroke="rgba(185,103,255,.28)" stroke-width="2"/>
+  <path d="M120 122 Q200 134 262 116" fill="none" stroke="rgba(120,160,220,.18)" stroke-width="2"/>
+  <ellipse cx="222" cy="86" rx="17" ry="7" fill="#b967ff" opacity=".85"/>
+  <ellipse cx="222" cy="86" rx="17" ry="7" fill="none" stroke="#e6ccff" stroke-width="1" opacity=".6"/>
+  <line x1="298" y1="90" x2="338" y2="80" stroke="${trim('probe')}" stroke-width="2.5"/>
+  <circle cx="338" cy="80" r="3.5" fill="${trim('probe')}"/>
+  <rect x="246" y="120" width="42" height="5" rx="2" fill="#1b2740" stroke="${trim('flood')}" stroke-width="1.6"/>
+  <rect x="254" y="128" width="36" height="5" rx="2" fill="#1b2740" stroke="${trim('flood')}" stroke-width="1.6"/>
+  <path d="M64 146 l9 9 l-9 9 l-9 -9 Z" fill="none" stroke="${trim('decoy')}" stroke-width="2" stroke-dasharray="3 3"/>
+  ${pip('probe', 306, 74)}${pip('flood', 240, 132)}${pip('whisper', 52, 52)}${pip('decoy', 84, 154)}
+</svg>`;
+}
+function xpBarHtml(p) {
+  const xp = p.xp || 0, lv = game.levelForXp(xp);
+  const cur = game.xpForLevel(lv), next = game.xpForLevel(lv + 1);
+  const pctv = Math.max(0, Math.min(100, Math.round((xp - cur) / (next - cur) * 100)));
+  return `<div class="xpbar"><i style="width:${pctv}%"></i></div><span class="xptext">${xp} XP · Lv ${lv} at ${cur} · next at ${next}</span>`;
+}
+function galacticBoardsHtml(state) {
+  const gt = state.galactic || { sorties: 0, withdrawals: 0, deaths: 0, turned: 0, encountersCleared: 0, capitalsSlain: 0, legendaries: 0, firstClear: {} };
+  const gp = Object.values(state.players).filter(x => x.email && x.galactic);
+  const gr = x => game.galacticRecord(x);
+  const list = (key, fmt) => gp.filter(x => gr(x)[key] > 0).sort((a, b) => gr(b)[key] - gr(a)[key]).slice(0, 5)
+    .map(p => `<li><a href="/fighter/${p.id}"><span class="lname">${esc(p.displayName || 'Fighter')}</span><span class="lstat">${fmt(gr(p)[key])}</span></a></li>`).join('')
+    || '<li class="dim">No mark set yet.</li>';
+  const fc = (gt.firstClear || {})['1'];
+  return `<div class="panel descent-boards">
+    <h2>The sortie boards</h2>
+    <p class="dim">${gt.sorties} sorties flown · ${gt.encountersCleared} encounters cleared · ${gt.capitalsSlain} capitals slain · ${gt.deaths} ships destroyed · ${gt.legendaries || 0} LEGENDARY pieces banked from the sky.</p>
+    ${fc ? `<p class="g-firstclear">★ SECTOR 1 FIRST CLEARED BY <strong>${esc(fc.name)}</strong> · ${new Date(fc.at).toISOString().slice(0, 10)} — receipted in the books, named and dated and permanent.</p>` : '<p class="g-firstclear unclaimed">★ Sector 1 stands uncleared. The first captain to bring down THE HERALD is receipted in the books forever.</p>'}
+    <h3 class="boardh">Deepest into the Reach</h3><ul class="board">${list('deepest', v => 'Encounter ' + v)}</ul>
+    <h3 class="boardh">Highest sortie score</h3><ul class="board">${list('bestScore', v => v + ' pts')}</ul>
+    <h3 class="boardh">Richest haul banked</h3><ul class="board">${list('bestHaul', v => '' + v)}</ul>
+  </div>`;
+}
+
+function galacticPage(state, me) {
+  if (state.config.frozen) return shell('Frozen', maintenanceCard(), me);
+  const member = !!(me && me.email);
+  const rec = member ? game.galacticRecord(me) : null;
+  const cleared1 = rec && rec.cleared['1'];
+  const fc = (state.galactic && state.galactic.firstClear || {})['1'];
+  const coords = [{ x: 20, y: 79 }, { x: 42, y: 61 }, { x: 58, y: 44 }, { x: 74, y: 28 }, { x: 87, y: 13 }];
+  const numerals = ['I', 'II', 'III', 'IV', 'V'];
+  const nodes = game.GALACTIC_SECTORS.map((s, i) => {
+    const c = coords[i];
+    if (s.playable) {
+      const st = cleared1 ? `<span class="gn-state cleared">★ CLEARED — ${new Date(cleared1.firstAt).toISOString().slice(0, 10)}</span>`
+        : `<span class="gn-state held">HELD BY THE ARMADA</span>`;
+      return `<a class="gnode playable ${cleared1 ? 'is-cleared' : ''}" href="#sector-1" style="left:${c.x}%;top:${c.y}%"><span class="gn-num">${numerals[i]}</span><span class="gn-name">${esc(s.name)}</span>${st}<span class="gn-cap">capital: ${esc(s.capital.name)}</span></a>`;
+    }
+    return `<div class="gnode locked" style="left:${c.x}%;top:${c.y}%" aria-disabled="true"><span class="gn-num">${numerals[i]}</span><span class="gn-name">${esc(s.name)}</span><span class="gn-state locked">🔒 LOCKED</span><span class="gn-cap">${s.capital ? 'capital: ' + esc(s.capital.name) : 'capital: uncharted'}</span></div>`;
+  }).join('');
+  const routePts = coords.map(c => `${c.x},${c.y}`).join(' ');
+  const ladder = game.GALACTIC_LADDER.map((kind, i) => {
+    const t = game.GALACTIC_TIERS[kind];
+    return `<span class="glad ${kind === 'capital' ? 'cap' : ''}">${i + 1} · ${t.tier.toUpperCase()} <em>${t.className}</em>${kind === 'squadrons' ? ' · MIRAGE feints' : ''}${kind === 'capital' ? ' · ' + esc(game.GALACTIC_CAPITAL.name) : ''}</span>`;
+  }).join('');
+  const myRecord = member ? `
+    <div class="descent-record grec">
+      <div><strong>${rec.sorties}</strong><span>sorties</span></div>
+      <div><strong>${rec.deepest ? 'Enc. ' + rec.deepest : '—'}</strong><span>deepest</span></div>
+      <div><strong>${rec.bestScore}</strong><span>best score</span></div>
+      <div><strong>${rec.capitalsSlain}</strong><span>capitals slain</span></div>
+      <div><strong>${game.galacticAttention(state, me, 1)}%</strong><span>armada attention</span></div>
+    </div>` : '';
+  const sectorCards = game.GALACTIC_SECTORS.map((s, i) => {
+    if (s.playable) {
+      return `<article class="gsector open" id="sector-1">
+        <header><span class="gsec-num">${numerals[i]}</span><div><h2>${esc(s.name)}</h2><span class="gsec-state ${cleared1 ? 'cleared' : 'held'}">${cleared1 ? '★ CLEARED BY YOU — the armada flies a notch quieter for you here' : 'HELD BY THE ARMADA'}</span></div></header>
+        <p class="gsec-story">${esc(s.story)}</p>
+        <div class="gladder">${ladder}</div>
+        <p class="dim">Eight encounters, flown as one sortie: your integrity and your attention carry from fight to fight, and the haul rides unbanked until you withdraw — or the Herald falls and banks it all on the spot. Destruction takes the unbanked STURDY and RARE; EPIC and above always come home. Clearing pays a burst of XP, a guaranteed capital-table drop (EPIC, with a LEGENDARY's chance), and a permanent notch off this sector's aggression for you. No GODFORGED falls in Sector 1 — god-tier steel waits at Blaze-class capitals, in deeper skies.</p>
+        ${fc ? `<p class="g-firstclear">★ First cleared by <strong>${esc(fc.name)}</strong> · ${new Date(fc.at).toISOString().slice(0, 10)} — the receipt stands in the books.</p>` : '<p class="g-firstclear unclaimed">★ No captain has cleared this sector. The first receipt is unwritten.</p>'}
+        ${myRecord}
+        <div class="gdoors">
+          ${member ? '<a class="fightbtn gfight" href="/galactic/fly">🚀&nbsp; CHALLENGE THE ARMADA</a>' : '<p class="dim">The sky is members-only — a sortie keeps what it wins, and keeping requires a name. <a href="/signup">Claim your profile</a> and the Reach is yours to fly.</p>'}
+          <button class="ghostbtn gduel" type="button" disabled title="Live duels arrive in a later phase">⚔ THE DUELING FIELD — <em>sealed until Phase G3</em></button>
+        </div>
+        <p class="dim">The dueling field is drawn on the chart because it is coming — live captain-versus-captain duels, refereed in real time. It opens in its own phase, on its own order, and not a day before it can be refereed honestly. The armada, meanwhile, is here now.</p>
+      </article>`;
+    }
+    return `<article class="gsector locked" id="sector-${s.id}">
+      <header><span class="gsec-num">${numerals[i]}</span><div><h2>${esc(s.name)}</h2><span class="gsec-state locked">🔒 LOCKED</span></div></header>
+      <p class="gsec-story">${esc(s.story)}</p>
+      ${s.capital ? `<p class="dim">Its capital: <strong>${esc(s.capital.name)}</strong> — held for its own sector, fought in its own campaign.</p>` : '<p class="dim">Its capital is not yet charted.</p>'}
+      <p class="glockreason">${esc(s.lockedReason)}</p>
+    </article>`;
+  }).join('');
+  const strip = member ? `
+  <div class="gstrip">
+    <a class="gstrip-ship" href="/galactic/bridge">${shipSvg(me, false)}<span class="gstrip-id"><strong>${esc(me.displayName || 'Captain')}</strong><span>Lv ${game.levelForXp(me.xp || 0)} · ${esc(game.classOf(me).name)} class</span></span></a>
+    <div class="gstrip-meters">
+      <div class="gmeter"><label>HULL</label><div class="bar int"><i style="width:100%"></i></div><span>${100 + (game.gearMods(game.wornGearMap(me).body || {}).plating || 0)}</span></div>
+      <div class="gmeter"><label>ATTENTION</label><div class="bar trace"><i style="width:${game.galacticAttention(state, me, 1)}%"></i></div><span>${game.galacticAttention(state, me, 1)}%</span></div>
+    </div>
+    <div class="gstrip-btns">
+      <a class="fightbtn small" href="/galactic/fly">⚔ FIGHT</a>
+      <a class="ghostbtn" href="/galactic/bridge">THE BRIDGE</a>
+    </div>
+  </div>` : `
+  <div class="gstrip guest">
+    <span class="dim">You are looking at her sky as a guest.</span>
+    <div class="gstrip-btns"><a class="fightbtn small" href="/signup">CLAIM A PROFILE TO FLY</a><a class="ghostbtn" href="/login">Sign in</a></div>
+  </div>`;
+  const body = `
+  <section class="gwrap">
+    <div class="gtop">
+      <div><span class="g-kicker">THE TWIN ARENA · THEATER III</span><h1>THE GALACTIC</h1></div>
+      <div class="gtop-meta"><span>SECTOR 1 · ARMADA PRESENCE: FLARE</span><a href="/">← the Arena door</a></div>
+    </div>
+    <p class="glede">The Twin's war has left the cathedral and taken the sky. Your fighter is a ship now — same build, same levels, same mind hunting you. Everything you ever earned flies with you.</p>
+    ${bannersHtml(state)}
+    <div class="gmap" role="navigation" aria-label="Star map of the armada's sectors">
+      <div class="gnebula n1"></div><div class="gnebula n2"></div><div class="gnebula n3"></div>
+      <div class="gstars a"></div><div class="gstars b"></div>
+      <svg class="groutes" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points="${routePts}" fill="none" stroke="rgba(255,150,80,.34)" stroke-width=".45" stroke-dasharray="1.6 1.1"/><polyline points="${routePts}" fill="none" stroke="rgba(185,103,255,.16)" stroke-width="1.4"/></svg>
+      ${nodes}
+      <span class="gyou" style="left:${coords[0].x}%;top:${coords[0].y}%">YOU ARE HERE</span>
+    </div>
+    ${sectorCards}
+    ${galacticBoardsHtml(state)}
+    <div class="panel">
+      <h2>How the sky works</h2>
+      <ol class="how">
+        <li><strong>Your build is your ship.</strong> Tools become weapons systems with identical referee math; worn gear rides the hull and sets its trim; fitted mods are hardpoints; the Mod Rail is your systems row, and its deployables fire in space exactly as in the Arena.</li>
+        <li><strong>One pool, one mind.</strong> XP, levels and weight class are shared across every theater. Her global learning ticks from galactic fights at the Arena rate — a counter she evolves against you anywhere is waiting everywhere.</li>
+        <li><strong>The Trace is Armada Attention here.</strong> The more you fight in a sector, the more its armada has read you — sector familiarity that sharpens its counters, filed per sector. It decays when you hunt in other theaters. Your Arena habits pre-read you at +10%, capped low.</li>
+        <li><strong>Fly the sortie.</strong> Eight encounters, escalating Pickets → Patrols → Mirage Squadrons → THE HERALD. Press on or withdraw after each; the capital's fall clears the sector, banks the haul, and is receipted forever.</li>
+      </ol>
+    </div>
+  </section>
+  ${strip}`;
+  return shell('The Galactic', body, me);
+}
+
+function galacticFlyPage(state, me) {
+  if (state.config.frozen) return shell('Frozen', maintenanceCard(), me);
+  const hero = `
+    <div class="gfly-hero">
+      <span class="g-kicker">SECTOR 1 · EMBERFALL REACH</span>
+      <h1>FLY THE SORTIE</h1>
+      <p class="lede">Eight encounters between you and the Herald. Your ship is your build — weapons, hull, hardpoints, systems row — and the armada is reading you the whole way out.</p>
+    </div>`;
+  if (!me || !me.email) {
+    const body = `<section class="descent-wrap">${hero}
+      <div class="panel"><h2>The sky is members-only</h2>
+      <p>A sortie keeps what it wins — and keeping requires a cargo hold, and a hold requires a name. <a href="/signup">Claim your profile</a> and take the sky. Guests may read the boards:</p></div>
+      ${galacticBoardsHtml(state)}</section>`;
+    return shell('Fly the Sortie', body, me);
+  }
+  const rec = game.galacticRecord(me);
+  const cleared1 = rec.cleared['1'];
+  const body = `
+  <section class="descent-wrap gfly">
+    ${hero}
+    ${bannersHtml(state)}
+    <div class="descent-record">
+      <div><strong>${rec.sorties}</strong><span>sorties</span></div>
+      <div><strong>${rec.deepest ? 'Enc. ' + rec.deepest : '—'}</strong><span>deepest</span></div>
+      <div><strong>${rec.bestScore}</strong><span>best score</span></div>
+      <div><strong>${rec.bestHaul}</strong><span>richest haul</span></div>
+      <div><strong>${rec.capitalsSlain}</strong><span>capitals slain</span></div>
+      <div><strong>${cleared1 ? '★ YES' : '—'}</strong><span>sector cleared</span></div>
+    </div>
+    <div class="hud">
+      <div class="hudcell"><label>ENEMY HULL</label><div class="bar hp"><i id="hpbar"></i></div><span id="hptext">100</span></div>
+      <div class="hudcell"><label>INTEGRITY</label><div class="bar int"><i id="intbar"></i></div><span id="inttext">100</span></div>
+      <div class="hudcell timer"><label>TIME</label><span id="clock">2:00</span></div>
+      <div class="hudcell"><label>ENERGY</label><div class="bar en"><i id="enbar"></i></div><span id="entext">100</span></div>
+      <div class="hudcell"><label>ATTENTION</label><div class="bar trace" id="tracewrap"><i id="tracebar"></i></div><span id="tracetext">0%</span></div>
+    </div>
+    <div class="runline" id="runline">Encounter — · Score 0 · Carrying nothing</div>
+    <div class="stage galactic-stage">
+      <canvas id="gate" width="900" height="560"></canvas>
+      <div id="lootlayer" class="lootlayer"></div>
+      <div id="bossplate" class="bossplate hidden"></div>
+      <div id="depthbanner" class="depthbanner hidden"></div>
+      <div id="gatechoice" class="gatechoice hidden">
+        <h2>THE ENEMY BREAKS</h2>
+        <p id="gatechoice-text">Press on into the Reach, or withdraw and bank everything you carry.</p>
+        <div class="gatechoice-btns">
+          <button id="descend-btn" class="fightbtn descend" type="button">▲ PRESS ON</button>
+          <button id="ascend-btn" class="fightbtn ascend" type="button">▼ WITHDRAW &amp; BANK</button>
+        </div>
+      </div>
+      <div id="winframe" class="winframe hidden"><span id="winframe-label">OPEN WINDOW ×2</span><i id="winframe-bar"></i></div>
+      <div id="stage-msg" class="stage-msg">
+        <h2>Your ship is on the pad, ${esc(me.displayName || 'captain')}.</h2>
+        <p>Your full Command Deck flies with you — tool pods as weapons systems, abilities, the shield flare — plus whatever your hull is wearing. Refit at <a href="/galactic/bridge">the Bridge</a>, never mid-sortie.</p>
+        ${armoryHtml(me)}
+        <button id="startbtn" class="fightbtn">🚀 BEGIN THE SORTIE</button>
+        <p class="dim">A sortie abandoned from this pad banks its haul like a withdrawal — the Keeper is not cruel, but the Reach keeps its own ledger.</p>
+      </div>
+      <div id="verdict" class="verdict hidden"></div>
+    </div>
+    <div id="twinread" class="twinread">The armada is reading you…</div>
+    <button id="parrybtn" class="parrybtn" type="button" disabled><span class="parry-charge" id="parry-charge"></span>⚡ SHIELD FLARE<span>tap when it winds up — or tap the enemy, or hit SPACE</span></button>
+    <div class="kit" id="kit"></div>
+    <div class="kit abilities" id="abilities"></div>
+    <div class="kit modrail" id="modrail"></div>
+    <div class="haulfeed panel"><h2>In the hold — unbanked until you withdraw or a capital falls</h2><ul id="haulfeed"><li class="dim">Empty hold. The Reach provides.</li></ul>
+    <p><button id="abandonbtn" class="ghostbtn hidden" type="button">Abandon the sortie — withdraw with what you carry</button></p></div>
+    ${galacticBoardsHtml(state)}
+    <div class="arena-foot">
+      <span>Pickets teach the theater; Patrols pair up; Squadrons fly MIRAGE feints — false wind-ups that eat a hasty flare. THE HERALD crowns the Reach, and its glances hunt the weapon your sortie leans on. Attention is the Trace wearing a sector's sky: loud flying is read, and read flying is countered.</span>
+      <button id="mutebtn" class="ghostbtn" type="button">Sound: on</button>
+    </div>
+  </section>
+  <script>window.TA_GALACTIC = true;</script>
+  <script src="/js/galactic.js"></script>`;
+  return shell('Fly the Sortie', body, me);
+}
+
+// ---- THE BRIDGE: the captain's whole profile, in the theater's dress -------
+function galacticBridgePage(state, p) {
+  if (state.config.frozen) return shell('Frozen', maintenanceCard(), p);
+  const cls = game.classOf(p);
+  const rec = game.galacticRecord(p);
+  const worn = game.wornGearMap(p);
+  const modSum = game.modSummary(p);
+  const founder = game.founderSerial(p);
+  const cleared1 = rec.cleared['1'];
+  const stands = game.GEAR_SLOTS.map(slot => {
+    const g = worn[slot];
+    const fm = slot !== 'body' ? game.fittedMod(p, slot) : null;
+    const modChip = fm ? `<span class="stand-mod" style="--mc:${game.FITTED_MODS[fm].color}">${game.FITTED_MODS[fm].sigil} ${esc(game.FITTED_MODS[fm].name)} on the hardpoint</span>` : '';
+    const unwear = g ? `<form method="post" action="/api/gear/unwear" class="inlineform"><input type="hidden" name="slot" value="${slot}"><input type="hidden" name="back" value="bridge"><button class="ghostbtn small" type="submit">Unmount</button></form>` : '';
+    if (!g) return `<div class="stand bare"><span class="stand-icon">${toolIcon(slot)}</span><span class="stand-slot">${SHIP_SLOTS[slot]}</span><strong class="stand-name dim">BARE STEEL</strong><span class="stand-affixes dim">nothing mounted — the Reach provides</span>${modChip}</div>`;
+    const tier = String(g.tier || 'STURDY').toUpperCase();
+    const affixes = game.gearLine(g).map(esc).join(' · ');
+    return `<div class="stand r-${tier.toLowerCase()}"><span class="stand-icon">${toolIcon(slot)}</span><span class="stand-slot">${SHIP_SLOTS[slot]}</span><strong class="stand-name">${esc(g.name)}</strong><span class="tierbadge t-${tier.toLowerCase()}">${tier}${g.serial ? ' No. ' + g.serial : ''}</span>${affixes ? `<span class="stand-affixes">${affixes}</span>` : ''}${modChip}${unwear}</div>`;
+  }).join('');
+  const satchel = (p.gear || []).filter(g => !g.worn).map(g => {
+    const tier = String(g.tier || 'STURDY').toUpperCase();
+    const mount = g.tier === 'GODFORGED'
+      ? `<span class="dim">declared at the Descent's door — treasures are not mounted</span>`
+      : `<form method="post" action="/api/gear/wear" class="inlineform"><input type="hidden" name="gearId" value="${g.id}"><input type="hidden" name="back" value="bridge"><button class="ghostbtn small" type="submit">Mount on hull</button></form>`;
+    return `<li class="gearline t-${tier.toLowerCase()}"><strong>${esc(g.name)}</strong> <span class="tierbadge t-${tier.toLowerCase()}">${tier}${g.serial ? ' No. ' + g.serial : ''}</span> <span class="dim">${SHIP_SLOTS[g.slot] || g.slot}${g.tier === 'GODFORGED' ? ` · charges ${g.charges} of ${g.chargesMax}${g.retired ? ' · spent out' : ''}` : ''}</span> ${mount}</li>`;
+  }).join('') || '<li class="dim">The hold is empty. Fly, delve, and breach — the house provides.</li>';
+  const fitForms = game.TOOL_IDS.map(tool => {
+    const owned = Object.keys(game.FITTED_MODS).filter(id => game.FITTED_MODS[id].tool === tool && p.modsOwned && p.modsOwned[id]);
+    const cur = game.fittedMod(p, tool);
+    if (!owned.length && !cur) return '';
+    return `<form method="post" action="/api/mods/fit" class="fitform"><input type="hidden" name="tool" value="${tool}"><input type="hidden" name="back" value="bridge"><label>${SHIP_SLOTS[tool]} hardpoint
+      <select name="mod"><option value="">— bare —</option>${owned.map(id => `<option value="${id}" ${cur === id ? 'selected' : ''}>${game.FITTED_MODS[id].sigil} ${esc(game.FITTED_MODS[id].name)}</option>`).join('')}</select></label><button class="ghostbtn small" type="submit">Socket</button></form>`;
+  }).join('');
+  const shelf = [];
+  for (const itemId of Object.keys(game.ITEMS)) {
+    const serials = (p.itemStock && p.itemStock[itemId]) || [];
+    for (const n of serials) shelf.push(itemLine(itemId, n));
+  }
+  const devil = p.devil || { held: 0, breached: 0 };
+  const body = `
+  <section class="bridge">
+    <div class="gtop">
+      <div><span class="g-kicker">THE GALACTIC · YOUR SHIP</span><h1>THE BRIDGE</h1></div>
+      <div class="gtop-meta"><a href="/galactic">← the star map</a></div>
+    </div>
+    <div class="captain-plate">
+      ${p.photo ? `<img class="p-face" src="${esc(p.photo)}" alt="">` : '<div class="p-face ghost">◐</div>'}
+      <div class="captain-id">
+        <h2>${esc(p.displayName || 'Captain')}</h2>
+        <p class="dim">${esc(p.email || '')} · <span class="classchip c${cls.idx}">${esc(cls.name)} class</span> · ${p.points} mutation points</p>
+        ${xpBarHtml(p)}
+        ${founder ? `<p class="embermark">🔥 Founder's Ember No. ${founder} — one of the first hundred. +10% XP in every theater.</p>` : ''}
+      </div>
+      <div class="captain-ship">${shipSvg(p, true)}</div>
+    </div>
+    <h2 class="bridge-h">The ship — your build, mounted</h2>
+    <div class="armory-stands">${stands}</div>
+    ${fitForms ? `<div class="panel"><h3>Hardpoints — socket the fitted mods</h3>${fitForms}</div>` : ''}
+    <div class="panel">
+      <h3>In the hold — the cargo satchel</h3>
+      <ul class="satchel">${satchel}</ul>
+      <p class="dim">Mounting and socketing happen here, between flights — never mid-sortie, never mid-delve. The same law in every theater.</p>
+    </div>
+    <h2 class="bridge-h">The record — every theater, one captain</h2>
+    <div class="record-grid">
+      <div class="record-card"><h3>⚔ The Arena</h3><p><strong>${p.record.bouts}</strong> bouts · <strong>${p.record.breaches}</strong> breaches · streak ${p.record.streak}${p.record.bestSecs ? ` · best ${game.fmtTime(p.record.bestSecs)}` : ''}</p><a href="/arena">Fight →</a></div>
+      <div class="record-card"><h3>🔥 The Pit</h3><p>As a hunter: <strong>${(p.pitAttack || {}).breaches || 0}</strong> devils breached in ${(p.pitAttack || {}).bouts || 0} bouts. Your devil: <strong>${devil.held}</strong> holds · breached ${devil.breached} · bounty ${game.bountyNow(p, Date.now())} pts.</p><a href="/pit">The hall →</a></div>
+      <div class="record-card"><h3>🕯 The Descent</h3><p><strong>${(p.descent || {}).runs || 0}</strong> runs · deepest Depth ${(p.descent || {}).deepest || 0} · best score ${(p.descent || {}).bestScore || 0} · bosses slain ${(p.descent || {}).bossesSlain || 0}.</p><a href="/descent">The stairs →</a></div>
+      <div class="record-card sky"><h3>🚀 The Galactic</h3><p><strong>${rec.sorties}</strong> sorties · deepest Encounter ${rec.deepest || 0} · best score ${rec.bestScore} · capitals slain ${rec.capitalsSlain} · Sector 1 attention ${game.galacticAttention(state, p, 1)}%.</p>
+      ${cleared1 ? `<p class="g-firstclear">★ SECTOR 1 CLEARED · first on ${new Date(cleared1.firstAt).toISOString().slice(0, 10)} · ${cleared1.clears} clearing${cleared1.clears === 1 ? '' : 's'} on your chart.</p>` : '<p class="dim">Sector 1 stands uncleared on your chart. THE HERALD is waiting.</p>'}
+      <a href="/galactic/fly">Fly →</a></div>
+    </div>
+    <h2 class="bridge-h">The collection — numbered, signed, earned</h2>
+    <div class="panel">
+      ${shelf.length ? `<ul class="shelf">${shelf.join('')}</ul>` : '<p class="dim">No numbered treasures yet. Breach Mirage and Armored devils, hold the Pit, take the deep bosses — the shelf fills with deeds, never with purchases.</p>'}
+      ${modSum.owned.length ? `<p class="pit-gear">Mods aboard: ${modSum.owned.map(id => `<span class="tierbadge" style="border-color:${game.MODS_ALL[id].color};color:${game.MODS_ALL[id].color}">${game.MODS_ALL[id].sigil} ${esc(game.MODS_ALL[id].name)}</span>`).join(' ')}</p>` : '<p class="dim">No mods aboard yet — they fall in the Descent and the Reach, and off breached devils.</p>'}
+      <p class="dim">The full satchel, evolution web and house profile live at <a href="/profile">your profile</a> — the same record, in the Arena's dress. Nothing here is a copy; it is one book, read from the Bridge.</p>
+    </div>
+  </section>`;
+  return shell('The Bridge', body, p);
 }
 
 function deckPage(state, opts) {
@@ -1006,4 +1376,4 @@ function deckPage(state, opts) {
   return shell('Arena Deck', body, null);
 }
 
-module.exports = { esc, shell, landing, arenaPage, authPage, profilePage, fighterPage, webPage, verdictPage, challengePage, deckPage, maintenanceCard, pitPage, devilCardHtml, descentPage };
+module.exports = { esc, shell, landing, arenaPage, authPage, profilePage, fighterPage, webPage, verdictPage, challengePage, deckPage, maintenanceCard, pitPage, devilCardHtml, descentPage, galacticPage, galacticFlyPage, galacticBridgePage, shipSvg };

@@ -16,11 +16,15 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const state = store.get();
 const activeFights = new Map(); // fightId -> fight (memory only; a restart voids open rounds)
 const activeRuns = new Map();   // runId -> Descent run (memory only, same law)
+const activeSorties = new Map(); // sortieId -> Galactic sortie (memory only, same law)
 
 // THE DESCENT's books, for worlds written before it existed.
 if (!state.descent) state.descent = { runs: 0, deaths: 0, ascents: 0, turned: 0, bossesSlain: 0, legendaries: 0, godforged: 0, depthsCleared: 0 };
 if (typeof state.descent.godforged !== 'number') state.descent.godforged = 0;
 if (!state.gearSeq) state.gearSeq = {};
+// THE GALACTIC's books, for worlds written before it existed.
+if (!state.galactic) state.galactic = { sorties: 0, withdrawals: 0, deaths: 0, turned: 0, encountersCleared: 0, capitalsSlain: 0, legendaries: 0, firstClear: {} };
+if (!state.galactic.firstClear) state.galactic.firstClear = {};
 
 // THE KEEPER'S SET: if the house owner fighter already exists (the deck was
 // tied in an earlier age), grant the master set now — at boot, before any
@@ -105,6 +109,8 @@ function newPlayer(displayName) {
     pitAttempts: {}, defenseXpDay: { day: game.dayKey(Date.now()), count: 0 },
     // THE DESCENT: the satchel's gear shelf + the delve record
     gear: [], descent: { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 },
+    // THE GALACTIC: the captain's sky record + per-sector armada attention
+    galactic: { sorties: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, capitalsSlain: 0, cleared: {}, sectors: {} },
     // MODS v1: owned mods (unnumbered, permanent) + the fitted sockets
     modsOwned: {}, modsFitted: { probe: null, flood: null, whisper: null, decoy: null }
   };
@@ -135,6 +141,7 @@ function ensurePlayer(p) {
   if (!p.defenseXpDay) p.defenseXpDay = { day: game.dayKey(Date.now()), count: 0 };
   if (!p.gear) p.gear = [];
   if (!p.descent) p.descent = { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 };
+  game.galacticRecord(p);
   game.ensureMods(p);
   return p;
 }
@@ -496,6 +503,160 @@ function finishDescentDepth(res, me, fight, sim, problem, actions, claimedDurati
   return sendJson(res, { descent: Object.assign({ over: false, state: 'gate' }, depthReport) });
 }
 
+// ---------- THE GALACTIC: sortie machinery ---------------------------------
+// A sortie is the Descent's chained law flown in space: integrity and
+// attention (the Trace) carry encounter to encounter, the haul rides
+// unbanked until you withdraw or a capital falls, and death in the dark
+// between stars takes the same STURDY/RARE tithe. The referee is the same
+// referee; the stats are dealt by the same effectiveStats — a captain's
+// Arena numbers ARE their galactic numbers, with the sector's attention
+// filed as the personal familiarity memory (plus the Arena's +10% pre-read).
+function dealGalacticEncounter(me, sortie) {
+  const n = sortie.encounter + 1;
+  sortie.encounter = n;
+  sortie.awaitingChoice = false;
+  const cleared = !!(game.galacticRecord(me).cleared && game.galacticRecord(me).cleared[String(sortie.sectorId)]);
+  const params = game.galacticEncounterParams(n, cleared);
+  const encSeed = (sortie.seed ^ Math.imul(n, 2654435761)) >>> 0;
+  const stats = game.effectiveStats(state, me, me.twinArmor || {}, {
+    gateHp: params.gateHp, roundMs: params.roundMs,
+    famShapes: game.galacticFamShapes(me, sortie.sectorId)
+  });
+  stats.combat.startIntegrity = sortie.integrity;
+  stats.combat.startTrace = sortie.trace;
+  const sortieTool = mostUsedTool(sortie.toolUseRun) || mostUsedTool(me.toolUse);
+  const strikes = game.makeGalacticStrikes(encSeed, n, params.roundMs, { cleared, sortieTool });
+  const isCapital = params.kind === 'capital';
+  const fight = {
+    id: rid(10), playerId: me.id, mode: 'galactic', sortieId: sortie.id,
+    encounter: n, kind: params.kind, bossId: isCapital ? game.GALACTIC_CAPITAL.id : null,
+    heart: false, bell: false, god: null, gearSerials: null,
+    stats, seed: encSeed, strikes, startedAt: Date.now(),
+    storm: false, pointsMult: 1, floodgates: !!state.config.floodgates
+  };
+  activeFights.set(fight.id, fight);
+  return {
+    fightId: fight.id, stats, strikes, mode: 'galactic',
+    galactic: {
+      sortieId: sortie.id, sector: sortie.sectorId, encounter: n,
+      kind: params.kind, tier: params.tier, className: params.className, label: params.label,
+      boss: isCapital ? { id: game.GALACTIC_CAPITAL.id, name: game.GALACTIC_CAPITAL.name, line: game.GALACTIC_CAPITAL.line } : null,
+      score: sortie.score, haulCount: sortie.haul.length,
+      integrity: sortie.integrity, trace: sortie.trace,
+      attention: game.galacticAttention(state, me, sortie.sectorId),
+      clearedBefore: cleared
+    }
+  };
+}
+// Settle one encounter of a sortie (called from /api/fight/finish). Drops
+// roll from the sortie seed and the encounter — reproducible, referee-
+// verifiable, unforgeable. NO GODFORGED falls in Sector 1: the sketch
+// places god-tier drops at Blaze+ capitals, and the Reach tops at Flare.
+function finishGalacticEncounter(res, me, fight, sim, problem, actions, claimedDuration) {
+  const sortie = activeSorties.get(fight.sortieId);
+  const n = fight.encounter, kind = fight.kind;
+  if (problem || !sortie) {
+    // A forged encounter voids the whole sortie: the haul was never real,
+    // and the books record the void.
+    if (sortie) activeSorties.delete(sortie.id);
+    const v = {
+      id: fight.id, fighterId: me.id, fighterName: me.displayName || 'A fighter',
+      mode: 'galactic', challengeOwnerId: null, result: 'lose', endReason: 'void',
+      secs: Math.round(claimedDuration / 1000), points: 0, xp: 0, emberBonus: false,
+      level: game.levelForXp(me.xp || 0), levelUp: false,
+      shapesTaught: [], shapesTaughtCount: 0, newToWorldCount: 0, armorGains: {},
+      fightStats: null, at: Date.now(), voided: problem || 'sortie lost'
+    };
+    state.verdicts[fight.id] = v;
+    state.fights.unshift({ id: fight.id, name: v.fighterName, result: 'lose', how: 'void', secs: v.secs, shapes: 0, mode: 'galactic', at: v.at });
+    state.fights = state.fights.slice(0, 60);
+    store.save(true);
+    return sendJson(res, { verdict: v, voided: v.voided, galactic: { over: true } });
+  }
+  const settledActions = sim.outcome ? actions.filter(a => a && a.t <= sim.outcome.at + 250) : actions;
+  // The Twin keeps the lesson of every encounter — filed as this sector's
+  // attention, and into her one global mind at the Arena rate.
+  game.teachGalactic(state, me, sortie.sectorId, settledActions);
+  if (sim.parries) me.parriesTotal = (me.parriesTotal || 0) + sim.parries;
+  for (const a of settledActions) {
+    if (a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:') && !String(a.tool || '').startsWith('mod:')) {
+      sortie.toolUseRun[a.tool] = (sortie.toolUseRun[a.tool] || 0) + 1;
+    }
+  }
+  let clearedEnc = false, died = false, turned = false;
+  if (sim.outcome && sim.outcome.result === 'win') clearedEnc = true;
+  else if (sim.outcome && sim.outcome.result === 'lose') died = true;
+  else turned = true; // the clock ran out — the fleet held its sky
+  // ---- drops, rolled from the sortie seed ^ the encounter
+  const drops = [];
+  const drng = game.rng32((sortie.seed ^ Math.imul(n, 40503)) >>> 0);
+  if (clearedEnc) {
+    sortie.score += 100 + n * 10;
+    if (kind === 'capital') {
+      sortie.score += 150;
+      // The capital's table, scaled to Sector 1: a guaranteed EPIC, with a
+      // LEGENDARY's chance at the boss rate — every clear pays it, the
+      // first clear included (the sketch's guaranteed capital-table drop).
+      const tier = drng() < game.bossLegendaryChance(8) ? 'LEGENDARY' : 'EPIC';
+      const piece = game.rollGearPiece(state, drng, { tier });
+      sortie.haul.push(piece); drops.push(piece);
+      if (drng() < 0.5) {
+        const p2 = game.rollGearPiece(state, drng, { tier: game.rollTier(drng, game.DROP_TABLES.elite) });
+        sortie.haul.push(p2); drops.push(p2);
+      }
+    } else if (drng() < (kind === 'pickets' ? 0.40 : kind === 'patrols' ? 0.60 : 0.75)) {
+      const piece = game.rollGearPiece(state, drng, { tier: game.rollTier(drng, game.DROP_TABLES[kind === 'pickets' ? 'shape' : 'elite']) });
+      sortie.haul.push(piece); drops.push(piece);
+    }
+  }
+  // MODS: rolled after the gear from the same seeded rng; banked on the spot.
+  const modDrops = clearedEnc ? game.rollGalacticMods(drng, me, kind) : [];
+  sortie.integrity = died ? 0 : sim.integrityLeft;
+  sortie.trace = sim.trace;
+  sortie.deepest = Math.max(sortie.deepest || 0, n);
+  if (clearedEnc) {
+    sortie.encountersCleared += 1;
+    sortie.xp += game.GALACTIC_XP.perEncounter + (kind === 'capital' ? game.GALACTIC_XP.capital : 0);
+    if (kind === 'capital') sortie.capitalsSlain += 1;
+  }
+  const encReport = {
+    encounter: n, kind, cleared: clearedEnc, died,
+    drops: dropSummaries(drops),
+    mods: modDrops.map(md => ({
+      id: md.id, kind: md.kind, name: game.MODS_ALL[md.id].name,
+      tool: game.FITTED_MODS[md.id] ? game.FITTED_MODS[md.id].tool : null
+    })),
+    score: sortie.score, haulCount: sortie.haul.length,
+    integrity: sortie.integrity, trace: sortie.trace
+  };
+  if (died || turned) {
+    const verdict = game.finishGalacticSortie(state, me, sortie, died ? 'death' : 'turned');
+    activeSorties.delete(sortie.id);
+    store.save(true);
+    return sendJson(res, { verdict, galactic: Object.assign({ over: true }, encReport) });
+  }
+  if (kind === 'capital') {
+    // THE CAPITAL FALLS: the sector is cleared, the haul banks on the
+    // spot, and the sortie ends in triumph — the clear is written in the
+    // same settle that banks it, so the receipt can never be half-kept.
+    sortie.sectorCleared = true;
+    const bankedNow = sortie.haul.splice(0, sortie.haul.length);
+    game.bankHaul(me, bankedNow);
+    sortie.bankedValue = (sortie.bankedValue || 0) + game.haulValue(bankedNow);
+    for (const pc of bankedNow) if (pc.tier === 'LEGENDARY') state.galactic.legendaries = (state.galactic.legendaries || 0) + 1;
+    const verdict = game.finishGalacticSortie(state, me, sortie, 'cleared');
+    activeSorties.delete(sortie.id);
+    store.save(true);
+    return sendJson(res, {
+      verdict,
+      galactic: Object.assign({ over: true, sectorCleared: true, bankedNow: dropSummaries(bankedNow) }, encReport)
+    });
+  }
+  sortie.awaitingChoice = true;
+  store.save(true);
+  return sendJson(res, { galactic: Object.assign({ over: false, state: 'choice' }, encReport) });
+}
+
 // ---------- routes ----------
 async function route(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -537,6 +698,16 @@ async function route(req, res) {
   }
   if (method === 'GET' && p === '/descent') {
     return sendHtml(res, views.descentPage(state, me));
+  }
+  if (method === 'GET' && p === '/galactic') {
+    return sendHtml(res, views.galacticPage(state, me));
+  }
+  if (method === 'GET' && p === '/galactic/fly') {
+    return sendHtml(res, views.galacticFlyPage(state, me));
+  }
+  if (method === 'GET' && p === '/galactic/bridge') {
+    if (!me.email) return sendHtml(res, views.authPage(state, me, 'signup'));
+    return sendHtml(res, views.galacticBridgePage(state, me));
   }
   if (method === 'GET' && p === '/login') return sendHtml(res, views.authPage(state, me, 'login'));
   if (method === 'GET' && p === '/signup') return sendHtml(res, views.authPage(state, me, 'signup'));
@@ -664,6 +835,16 @@ async function route(req, res) {
       hauls: members.filter(x => drec(x).bestHaul > 0).sort((a, b) => drec(b).bestHaul - drec(a).bestHaul).slice(0, 5)
         .map(x => ({ id: x.id, name: x.displayName, haul: drec(x).bestHaul }))
     };
+    // THE GALACTIC's boards: deepest sorties, richest runs, the first-clear book.
+    const grec = x => game.galacticRecord(x);
+    const galacticBoards = {
+      tallies: state.galactic || { sorties: 0, withdrawals: 0, deaths: 0, turned: 0, encountersCleared: 0, capitalsSlain: 0, legendaries: 0, firstClear: {} },
+      deepest: members.filter(x => grec(x).deepest > 0).sort((a, b) => grec(b).deepest - grec(a).deepest).slice(0, 5)
+        .map(x => ({ id: x.id, name: x.displayName, deepest: grec(x).deepest })),
+      scores: members.filter(x => grec(x).bestScore > 0).sort((a, b) => grec(b).bestScore - grec(a).bestScore).slice(0, 5)
+        .map(x => ({ id: x.id, name: x.displayName, score: grec(x).bestScore })),
+      firstClear: (state.galactic && state.galactic.firstClear) || {}
+    };
     const storm = game.stormActive(state);
     const bc = state.config.broadcast;
     const broadcast = bc && bc.text && (!bc.expiresAt || Date.now() < bc.expiresAt) ? bc.text : null;
@@ -678,6 +859,7 @@ async function route(req, res) {
       broadcast, floodgates: !!state.config.floodgates, spotlight,
       pit: { tallies: state.pit || { bouts: 0, holds: 0, breaches: 0 }, holds: pitTop.holds, bounties: pitTop.bounties, hunters: pitTop.hunters },
       descent: descentBoards,
+      galactic: galacticBoards,
       founders: { claimed: (state.itemsSeq && state.itemsSeq.foundersember) || 0, cap: game.FOUNDER_CAP }
     });
   }
@@ -692,6 +874,7 @@ async function route(req, res) {
       gear: me.gear || [], wornGear: game.gearSummary(game.wornGearMap(me)),
       mods: game.modSummary(me),
       descent: me.descent || { runs: 0, deepest: 0, bestScore: 0, bestHaul: 0, deaths: 0, bossesSlain: 0 },
+      galactic: game.galacticRecord(me),
       pitAttack: me.pitAttack || { bouts: 0, breaches: 0 },
       devil: me.devil ? { held: me.devil.held, breached: me.devil.breached, bounty: game.bountyNow(me, Date.now()) } : null
     });
@@ -890,6 +1073,11 @@ async function route(req, res) {
     if (fight.mode === 'descent') {
       return finishDescentDepth(res, me, fight, sim, problem, actions, claimedDuration);
     }
+    // THE GALACTIC settles encounter by encounter through its own director
+    // (drops, banking, the sector-clear receipt) — same referee above.
+    if (fight.mode === 'galactic') {
+      return finishGalacticEncounter(res, me, fight, sim, problem, actions, claimedDuration);
+    }
     if (problem) {
       // A voided Pit bout refunds its declared items — the fight, honestly,
       // never happened. (The daily attempt stays spent: the door was used.)
@@ -964,6 +1152,9 @@ async function route(req, res) {
     for (const r of activeRuns.values()) {
       if (r.playerId === me.id) return sendJson(res, { error: 'already descending', message: 'You are already down there. Finish or abandon that run first.' }, 409);
     }
+    for (const s of activeSorties.values()) {
+      if (s.playerId === me.id) return sendJson(res, { error: 'already flying', message: 'You are out in the Galactic. One chained road at a time.' }, 409);
+    }
     const wantHeart = !!f.heart, wantBell = !!f.bell;
     if (wantHeart && game.itemCount(me, 'secondheart') < 1) return sendJson(res, { error: 'item', message: 'You hold no Second Heart.' }, 400);
     if (wantBell && game.itemCount(me, 'stillbell') < 1) return sendJson(res, { error: 'item', message: 'You hold no Stillbell.' }, 400);
@@ -1029,24 +1220,81 @@ async function route(req, res) {
     return sendJson(res, { verdict, descent: { over: true } });
   }
 
+  // ---- THE GALACTIC: sorties ------------------------------------------------
+  if (method === 'POST' && p === '/api/galactic/start') {
+    if (state.config.frozen) return sendJson(res, { error: 'frozen', message: 'The arena is frozen.' }, 423);
+    if (!me.email) return sendJson(res, { error: 'members-only', message: 'The Galactic is members-only. Claim a profile to fly.' }, 403);
+    for (const s of activeSorties.values()) {
+      if (s.playerId === me.id) return sendJson(res, { error: 'already flying', message: 'You are already out there. Finish or abandon that sortie first.' }, 409);
+    }
+    for (const r of activeRuns.values()) {
+      if (r.playerId === me.id) return sendJson(res, { error: 'already descending', message: 'You are down in the Descent. One chained road at a time.' }, 409);
+    }
+    const sortie = {
+      id: rid(10), playerId: me.id, sectorId: 1, seed: crypto.randomInt(1, 2147483647),
+      encounter: 0, encountersCleared: 0, deepest: 0, score: 0, xp: 0,
+      haul: [], bankedValue: 0, capitalsSlain: 0, sectorCleared: false,
+      integrity: 100, trace: 0, toolUseRun: {},
+      awaitingChoice: false, over: false, startedAt: Date.now()
+    };
+    const base = game.effectiveStats(state, me, me.twinArmor || {});
+    sortie.integrity = base.combat.playerHp;
+    activeSorties.set(sortie.id, sortie);
+    const payload = dealGalacticEncounter(me, sortie);
+    store.save(true);
+    return sendJson(res, payload);
+  }
+  if (method === 'POST' && p === '/api/galactic/choose') {
+    const f = await bodyJson(req).catch(() => ({}));
+    const sortie = activeSorties.get(String(f.sortieId || ''));
+    if (!sortie || sortie.playerId !== me.id) return sendJson(res, { error: 'sortie not found or not yours' }, 404);
+    if (!sortie.awaitingChoice) return sendJson(res, { error: 'no choice stands open' }, 409);
+    if (f.choice === 'withdraw') {
+      const verdict = game.finishGalacticSortie(state, me, sortie, 'withdraw');
+      activeSorties.delete(sortie.id);
+      store.save(true);
+      return sendJson(res, { verdict, galactic: { over: true } });
+    }
+    if (f.choice === 'press') {
+      const payload = dealGalacticEncounter(me, sortie);
+      store.save(true);
+      return sendJson(res, payload);
+    }
+    return sendJson(res, { error: 'choose press or withdraw' }, 400);
+  }
+  if (method === 'POST' && p === '/api/galactic/abandon') {
+    const f = await bodyJson(req).catch(() => ({}));
+    const sortie = activeSorties.get(String(f.sortieId || ''));
+    if (!sortie || sortie.playerId !== me.id) return sendJson(res, { error: 'sortie not found or not yours' }, 404);
+    for (const [fid, ft] of activeFights) if (ft.sortieId === sortie.id) activeFights.delete(fid);
+    const verdict = game.finishGalacticSortie(state, me, sortie, 'withdraw');
+    activeSorties.delete(sortie.id);
+    store.save(true);
+    return sendJson(res, { verdict, galactic: { over: true } });
+  }
+
   // ---- the satchel's gear shelf: swapping happens between runs, never mid-delve
   if (method === 'POST' && p === '/api/gear/wear') {
     if (!me.email) return redirect(res, '/signup');
     const f = await bodyForm(req);
+    const back = f.back === 'bridge' ? '/galactic/bridge' : '/profile#satchel';
     for (const r of activeRuns.values()) if (r.playerId === me.id) return redirect(res, '/descent?gear=run');
+    for (const s of activeSorties.values()) if (s.playerId === me.id) return redirect(res, '/galactic/fly?gear=run');
     const err = game.wearGear(me, String(f.gearId || ''));
-    if (err) return redirect(res, '/profile?gear=bad');
+    if (err) return redirect(res, f.back === 'bridge' ? '/galactic/bridge?gear=bad' : '/profile?gear=bad');
     store.save(true);
-    return redirect(res, '/profile#satchel');
+    return redirect(res, back);
   }
   if (method === 'POST' && p === '/api/gear/unwear') {
     if (!me.email) return redirect(res, '/signup');
     const f = await bodyForm(req);
+    const back = f.back === 'bridge' ? '/galactic/bridge' : '/profile#satchel';
     for (const r of activeRuns.values()) if (r.playerId === me.id) return redirect(res, '/descent?gear=run');
+    for (const s of activeSorties.values()) if (s.playerId === me.id) return redirect(res, '/galactic/fly?gear=run');
     const err = game.unwearGear(me, String(f.slot || ''));
-    if (err) return redirect(res, '/profile?gear=bad');
+    if (err) return redirect(res, f.back === 'bridge' ? '/galactic/bridge?gear=bad' : '/profile?gear=bad');
     store.save(true);
-    return redirect(res, '/profile#satchel');
+    return redirect(res, back);
   }
 
   // ---- MODS v1: socketing happens at the satchel, between runs — the same
@@ -1061,10 +1309,15 @@ async function route(req, res) {
         ? sendJson(res, { error: 'run-active', message: 'Sockets are closed while you are down in the Descent.' }, 409)
         : redirect(res, '/descent?gear=run');
     }
+    for (const s of activeSorties.values()) {
+      if (s.playerId === me.id) return isJson
+        ? sendJson(res, { error: 'run-active', message: 'Sockets are closed while you are out in the Galactic.' }, 409)
+        : redirect(res, '/galactic/fly?gear=run');
+    }
     const err = game.fitMod(me, String(f.tool || ''), f.mod ? String(f.mod) : null);
-    if (err) return isJson ? sendJson(res, { error: err }, 400) : redirect(res, '/profile?mods=bad');
+    if (err) return isJson ? sendJson(res, { error: err }, 400) : redirect(res, f.back === 'bridge' ? '/galactic/bridge?mods=bad' : '/profile?mods=bad');
     store.save(true);
-    return isJson ? sendJson(res, { ok: true, mods: game.modSummary(me) }) : redirect(res, '/profile#mods');
+    return isJson ? sendJson(res, { ok: true, mods: game.modSummary(me) }) : redirect(res, f.back === 'bridge' ? '/galactic/bridge' : '/profile#mods');
   }
 
   // ---- deck

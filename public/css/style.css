@@ -681,3 +681,148 @@ ul#haulfeed{list-style:none; padding:0; margin:.4rem 0}
   .glitch, .hero-gate .ring, .hero-gate .eye, .parrybtn.armed, .beam,
   .stormbanner, .live-dot, .tool.mod.armed{animation:none !important}
 }
+
+/* ==========================================================================
+   THE GALACTIC — ember-and-void. A sky, not a hallway: the star map fills
+   the screen, sectors are places, the command strip rides the bottom with
+   your ship on it. Rarity colors keep the house tokens — gold is always
+   LEGENDARY, in every theater. Mobile-first; reduced motion respected.
+   ========================================================================== */
+.herobtn{display:inline-block; margin:.7rem 0 0 .4rem; padding:.8rem 1.4rem; border-radius:10px; text-decoration:none; font-weight:700; letter-spacing:.04em}
+.gwrap{max-width:1100px; margin:0 auto; padding:0 .8rem 7.5rem}
+.bridge{max-width:1100px; margin:0 auto; padding:0 .8rem 3rem}
+.gtop{display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; margin:1.3rem 0 .3rem; flex-wrap:wrap}
+.gtop h1, .gfly-hero h1{font-family:var(--font-display); font-size:clamp(2.3rem,7vw,3.6rem); line-height:1; margin:.15rem 0 0; letter-spacing:.06em;
+  background:linear-gradient(180deg,#fff3d6,#ffb35c 55%,#ff7a2a); -webkit-background-clip:text; background-clip:text; color:transparent;
+  filter:drop-shadow(0 0 18px rgba(255,122,42,.35))}
+.g-kicker{letter-spacing:.32em; color:var(--violet); font-size:.7rem; font-weight:800}
+.gtop-meta{text-align:right; color:var(--dim); display:flex; flex-direction:column; gap:.3rem; font-size:.78rem; letter-spacing:.14em}
+.gtop-meta a{color:var(--cyan)}
+.glede{color:#aebadd; max-width:58ch; font-size:1.02rem; line-height:1.5}
+.gmap{position:relative; height:min(76vh,700px); min-height:540px; border:1px solid #26314d; border-radius:20px; overflow:hidden; margin-top:1rem;
+  background:
+    radial-gradient(700px 300px at 80% 0%, rgba(120,50,180,.16), transparent 65%),
+    radial-gradient(600px 320px at 8% 100%, rgba(20,120,140,.13), transparent 65%),
+    radial-gradient(500px 260px at 55% 45%, rgba(255,90,40,.06), transparent 70%),
+    linear-gradient(180deg,#02030a,#050914 55%,#0a0616);
+  box-shadow:inset 0 0 120px rgba(0,0,0,.75), 0 0 44px rgba(30,40,90,.25)}
+.gnebula{position:absolute; border-radius:50%; filter:blur(34px); pointer-events:none}
+.gnebula.n1{width:340px; height:340px; right:-70px; top:-90px; background:radial-gradient(circle, rgba(150,60,220,.34), transparent 70%)}
+.gnebula.n2{width:300px; height:300px; left:-80px; bottom:-90px; background:radial-gradient(circle, rgba(20,150,170,.28), transparent 70%)}
+.gnebula.n3{width:420px; height:260px; left:38%; top:36%; background:radial-gradient(circle, rgba(255,90,40,.16), transparent 70%)}
+.gstars{position:absolute; left:0; right:0; top:-260px; height:calc(100% + 260px); background-repeat:repeat; pointer-events:none}
+.gstars.a{background-image:
+  radial-gradient(1.6px 1.6px at 22px 34px, rgba(255,255,255,.95), transparent 60%),
+  radial-gradient(1.2px 1.2px at 130px 90px, rgba(207,228,255,.8), transparent 60%),
+  radial-gradient(1px 1px at 200px 190px, rgba(255,255,255,.7), transparent 60%),
+  radial-gradient(1.3px 1.3px at 70px 220px, rgba(255,233,168,.85), transparent 60%);
+  background-size:260px 260px; animation:gstardrift 110s linear infinite}
+.gstars.b{background-image:
+  radial-gradient(1px 1px at 40px 60px, rgba(160,190,240,.75), transparent 60%),
+  radial-gradient(1.8px 1.8px at 150px 140px, rgba(255,255,255,.9), transparent 60%),
+  radial-gradient(1px 1px at 96px 168px, rgba(207,228,255,.6), transparent 60%);
+  background-size:180px 180px; animation:gstardrift 65s linear infinite; opacity:.8}
+@keyframes gstardrift{from{transform:translateY(0)} to{transform:translateY(260px)}}
+.groutes{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+.gnode{position:absolute; transform:translate(-50%,-50%); width:108px; min-height:108px; border-radius:50%;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+  padding:.55rem; border:2px solid; text-decoration:none; z-index:3}
+.gnode.playable{border-color:#ff7a2a; color:#ffe9d0;
+  background:radial-gradient(circle at 50% 32%, rgba(255,140,50,.42), rgba(24,9,5,.94) 72%);
+  box-shadow:0 0 38px rgba(255,90,40,.5), inset 0 0 26px rgba(255,90,40,.28);
+  animation:gpulse 3.4s ease-in-out infinite}
+.gnode.playable.is-cleared{border-color:var(--cyan); color:#dff8ff;
+  background:radial-gradient(circle at 50% 32%, rgba(0,229,255,.30), rgba(4,16,22,.94) 72%);
+  box-shadow:0 0 34px rgba(0,229,255,.4), inset 0 0 24px rgba(0,229,255,.2)}
+@keyframes gpulse{0%,100%{box-shadow:0 0 30px rgba(255,90,40,.38), inset 0 0 22px rgba(255,90,40,.22)} 50%{box-shadow:0 0 52px rgba(255,90,40,.62), inset 0 0 30px rgba(255,90,40,.34)}}
+.gnode.locked{border-color:#2a3350; color:#7c8aa5;
+  background:radial-gradient(circle at 50% 32%, rgba(70,84,120,.22), rgba(5,6,12,.95) 72%);
+  box-shadow:inset 0 0 22px rgba(0,0,0,.6)}
+.gn-num{font-family:var(--font-display); font-size:1.35rem; line-height:1}
+.gn-name{font-size:.57rem; letter-spacing:.13em; font-weight:800; line-height:1.3; margin-top:.2rem}
+.gn-state{font-size:.54rem; letter-spacing:.1em; margin-top:.25rem; font-weight:700}
+.gn-state.held{color:#ff9a3c}
+.gn-state.cleared{color:var(--cyan)}
+.gn-cap{font-size:.52rem; color:var(--dim); margin-top:.15rem; letter-spacing:.04em}
+.gyou{position:absolute; transform:translate(-50%,62px); color:var(--cyan); font-size:.6rem; letter-spacing:.24em; font-weight:800;
+  text-shadow:0 0 12px rgba(0,229,255,.8); z-index:3; white-space:nowrap}
+.gyou::before{content:"▲"; display:block; text-align:center; font-size:.55rem; margin-bottom:.1rem}
+.gsector{margin-top:1rem; border:1px solid var(--line); background:var(--panelbg); border-radius:14px; padding:1.05rem 1.15rem; clip-path:var(--cut)}
+.gsector.open{border-color:#5a3a22; box-shadow:0 0 30px rgba(255,90,40,.10)}
+.gsector header{display:flex; gap:.9rem; align-items:center}
+.gsector h2{margin:0; font-family:var(--font-display); letter-spacing:.05em; font-size:1.45rem}
+.gsec-num{font-family:var(--font-display); font-size:1.5rem; width:52px; height:52px; flex:0 0 52px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; border:2px solid var(--oldgold); color:var(--parchment);
+  background:radial-gradient(circle at 50% 35%, rgba(216,164,65,.25), rgba(10,8,4,.9) 75%)}
+.gsector.locked .gsec-num{border-color:#33405e; color:#7c8aa5; background:radial-gradient(circle at 50% 35%, rgba(70,84,120,.2), rgba(5,6,12,.92) 75%)}
+.gsec-state{font-size:.68rem; letter-spacing:.16em; font-weight:800}
+.gsec-state.held{color:#ff9a3c}
+.gsec-state.cleared{color:var(--cyan)}
+.gsec-state.locked{color:#7c8aa5}
+.gsec-story{color:#c3cee6; line-height:1.55; max-width:68ch}
+.gladder{display:flex; flex-wrap:wrap; gap:.4rem; margin:.7rem 0}
+.glad{border:1px solid #33405e; border-radius:999px; padding:.3rem .65rem; font-size:.72rem; letter-spacing:.05em; background:rgba(10,14,26,.6)}
+.glad em{color:var(--dim); font-style:normal}
+.glad.cap{border-color:var(--oldgold); color:var(--parchment); box-shadow:0 0 14px rgba(255,215,0,.18)}
+.g-firstclear{color:var(--oldgold); font-weight:600}
+.g-firstclear.unclaimed{color:var(--dim); font-weight:400}
+.glockreason{border-left:3px solid #46587e; padding:.2rem 0 .2rem .75rem; color:#aebadd; font-weight:600; max-width:62ch}
+.gdoors{display:flex; gap:.7rem; flex-wrap:wrap; align-items:center; margin-top:.9rem}
+.gfight{font-size:1.05rem}
+.gduel{opacity:.55; cursor:not-allowed}
+.gstrip{position:fixed; left:0; right:0; bottom:0; z-index:60; display:flex; gap:.9rem; align-items:center;
+  background:linear-gradient(180deg, rgba(10,13,24,.93), rgba(4,5,11,.98));
+  border-top:1px solid #2c3a5c; padding:.5rem .9rem; backdrop-filter:blur(9px);
+  box-shadow:0 -12px 34px rgba(0,0,0,.55)}
+.gstrip-ship{display:flex; align-items:center; gap:.6rem; text-decoration:none; color:var(--ink); min-width:0}
+.ship.mini{width:96px; height:auto; flex:0 0 auto; filter:drop-shadow(0 0 10px rgba(90,120,255,.25))}
+.ship.big{width:100%; max-width:440px; height:auto; filter:drop-shadow(0 0 22px rgba(90,120,255,.3))}
+.gstrip-id{display:flex; flex-direction:column; line-height:1.25; white-space:nowrap}
+.gstrip-id span{color:var(--dim); font-size:.72rem; letter-spacing:.06em}
+.gstrip-meters{flex:1; display:flex; gap:1.1rem; min-width:110px}
+.gmeter{flex:1; display:flex; align-items:center; gap:.45rem}
+.gmeter label{font-size:.6rem; letter-spacing:.16em; color:var(--dim); font-weight:800}
+.gmeter .bar{flex:1}
+.gmeter span{font-size:.78rem; min-width:2ch}
+.gstrip-btns{display:flex; gap:.5rem; align-items:center}
+.gstrip.guest{justify-content:space-between}
+.gfly-hero{margin-top:1.2rem}
+.galactic-stage{background:#02030a}
+.galactic-stage canvas{background:transparent}
+.captain-plate{display:flex; gap:1.1rem; flex-wrap:wrap; align-items:center; border:1px solid var(--line);
+  background:var(--panelbg); border-radius:14px; padding:1rem 1.1rem; clip-path:var(--cut); margin-top:1rem}
+.captain-id{flex:1; min-width:230px}
+.captain-id h2{margin:.1rem 0 .3rem; font-family:var(--font-display); font-size:1.7rem; letter-spacing:.03em}
+.captain-ship{flex:1; min-width:260px; display:flex; justify-content:center}
+.xpbar{height:9px; background:#141b2e; border-radius:99px; overflow:hidden; margin:.45rem 0 .25rem; border:1px solid #232f4d}
+.xpbar i{display:block; height:100%; background:linear-gradient(90deg, var(--violet), var(--cyan)); box-shadow:0 0 12px rgba(0,229,255,.5)}
+.xptext{font-size:.72rem; color:var(--dim); letter-spacing:.05em}
+.bridge-h{margin:1.5rem 0 .65rem; font-family:var(--font-display); letter-spacing:.05em; font-size:1.35rem}
+.record-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(235px,1fr)); gap:.8rem}
+.record-card{border:1px solid var(--line); background:var(--panelbg); border-radius:12px; padding:.9rem 1rem}
+.record-card h3{margin:.1rem 0 .5rem; font-size:1rem; letter-spacing:.04em}
+.record-card p{color:#c3cee6; line-height:1.5; margin:.3rem 0}
+.record-card.sky{border-color:#3a4a7a; box-shadow:inset 0 0 30px rgba(40,60,160,.14), 0 0 18px rgba(40,60,160,.12)}
+.inlineform{display:inline-block; margin-left:.5rem}
+.fitform{display:flex; gap:.6rem; align-items:flex-end; flex-wrap:wrap; margin:.45rem 0}
+.fitform label{display:flex; flex-direction:column; gap:.3rem; font-size:.78rem; color:var(--dim); letter-spacing:.05em}
+.fitform select, .bridge select{background:var(--panel2); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:.45rem .6rem}
+.satchel{list-style:none; padding:0; margin:.4rem 0}
+.shelf{list-style:none; padding:0; margin:.4rem 0}
+@media (max-width:700px){
+  .gnode{width:88px; min-height:88px; padding:.4rem}
+  .gn-num{font-size:1.1rem}
+  .gn-name{font-size:.5rem}
+  .gyou{transform:translate(-50%,52px)}
+  .gmap{min-height:480px}
+  .gstrip{gap:.55rem; padding:.45rem .6rem}
+  .ship.mini{width:62px}
+  .gstrip-meters{gap:.6rem}
+  .gmeter label{display:none}
+  .gtop-meta{text-align:left}
+  .herobtn{margin-left:0}
+}
+@media (prefers-reduced-motion: reduce){
+  .gstars{animation:none}
+  .gnode.playable{animation:none}
+}
