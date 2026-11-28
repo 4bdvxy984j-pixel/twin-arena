@@ -17,7 +17,7 @@ function shell(title, body, me) {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<!-- twin-arena build: 2026.11.27-galactic-rt -->
+<!-- twin-arena build: 2026.11.27-galactic-1944 -->
 <title>${esc(title)} — THE TWIN ARENA</title>
 <link rel="stylesheet" href="/css/style.css">
 <script src="/js/sfx.js"></script>
@@ -992,7 +992,7 @@ function galacticPage(state, me) {
         ${fc ? `<p class="g-firstclear">★ First cleared by <strong>${esc(fc.name)}</strong> · ${new Date(fc.at).toISOString().slice(0, 10)} — the receipt stands in the books, and 🖋 <strong>the Ledger's seal</strong> stands on it: the Reach was a relay, and what lies beyond it has the name now.</p>` : '<p class="g-firstclear unclaimed">★ No captain has cleared this sector. The first receipt is unwritten.</p>'}
         ${myRecord}
         <div class="gdoors">
-          ${member ? '<a class="fightbtn gfight" href="/galactic/fly">🚀&nbsp; CHALLENGE THE ARMADA</a>' : '<p class="dim">The sky is members-only — a sortie keeps what it wins, and keeping requires a name. <a href="/signup">Claim your profile</a> and the Reach is yours to fly.</p>'}
+          ${member ? '<a class="fightbtn gfight" href="/galactic/fly">🚀&nbsp; CHALLENGE THE ARMADA</a> <a class="ghostbtn gfight44" href="/galactic/fly?form=scroll">🕹&nbsp; FLY IT AS 1944</a>' : '<p class="dim">The sky is members-only — a sortie keeps what it wins, and keeping requires a name. <a href="/signup">Claim your profile</a> and the Reach is yours to fly.</p>'}
           <button class="ghostbtn gduel" type="button" disabled title="Live duels arrive in a later phase">⚔ THE DUELING FIELD — <em>sealed until Phase G3</em></button>
         </div>
         <p class="dim">The dueling field is drawn on the chart because it is coming — live captain-versus-captain duels, refereed in real time. It opens in its own phase, on its own order, and not a day before it can be refereed honestly. The armada, meanwhile, is here now.</p>
@@ -1112,6 +1112,7 @@ function galacticFlyPage(state, me) {
         ${armoryHtml(me)}
         <button id="startbtn" class="fightbtn">🚀 BEGIN THE SORTIE</button>
         <p class="dim">Real-time flight opens over this pad when your device can hold it — drag to fly, hold FIRE, spin the wheel to swap weapons mid-flight. If it cannot open, this classic command deck is the battle entire, whole and referee-true. <a href="/galactic/fly?classic=1">Fly the classic deck directly</a>.</p>
+        <p class="dim">Or fly the Reach the old way — <a href="/galactic/fly?form=scroll"><strong>1944 FORM</strong></a>: a scrolling sky, your thumb on the ship, waves that move and shoot back, and the Herald at the top of the climb. Same sortie, same referee, same receipts.</p>
         <p class="dim">A sortie abandoned from this pad banks its haul like a withdrawal — the Keeper is not cruel, but the Reach keeps its own ledger.</p>
       </div>
       <div id="verdict" class="verdict hidden"></div>
@@ -1133,6 +1134,89 @@ function galacticFlyPage(state, me) {
   <script src="/js/galactic-rt.js"></script>
   <script src="/js/galactic.js"></script>`;
   return shell('Fly the Sortie', body, me);
+}
+
+// ---- 1944 FORM: the scrolling sky -----------------------------------------
+// The same sortie flown as a vertical-scrolling shooter: the client is a
+// canvas, a fly wheel, an ACTIVATE key and one big FIRE button. Everything
+// it shows was dealt by the server; everything it claims is replayed by
+// the scroll referee. The wheel battle and the classic deck stand whole
+// beside it — this page replaces nothing.
+function galacticScrollPage(state, me) {
+  if (state.config.frozen) return shell('Frozen', maintenanceCard(), me);
+  const hero = `
+    <div class="gfly-hero">
+      <span class="g-kicker">SECTOR 1 · EMBERFALL REACH · 1944 FORM</span>
+      <h1>FLY THE CLIMB</h1>
+      <p class="lede">The Reach, flown the old way: the sky scrolls, the waves move and shoot back, and you fly it with your thumb — dodging is real, positioning is real, and the referee replays every inch of it. Eight stages of Phase 1, each its own stretch of sky, and THE HERALD enthroned at the top of the climb.</p>
+      <p class="scforms"><a href="/galactic/fly">◉ WHEEL BATTLE</a><span class="scform-on">🕹 1944 FORM</span><a href="/galactic/fly?classic=1">▦ CLASSIC DECK</a></p>
+    </div>`;
+  if (!me || !me.email) {
+    const body = `<section class="descent-wrap">${hero}
+      <div class="panel"><h2>The sky is members-only</h2>
+      <p>A sortie keeps what it wins — and keeping requires a cargo hold, and a hold requires a name. <a href="/signup">Claim your profile</a> and take the sky. Guests may read the boards:</p></div>
+      ${galacticBoardsHtml(state)}</section>`;
+    return shell('Fly the Climb — 1944', body, me);
+  }
+  const rec = game.galacticRecord(me);
+  const cleared1 = rec.cleared['1'];
+  const body = `
+  <section class="descent-wrap gfly scwrap">
+    ${hero}
+    ${bannersHtml(state)}
+    <div class="descent-record">
+      <div><strong>${rec.sorties}</strong><span>sorties</span></div>
+      <div><strong>${rec.deepest ? 'Stage ' + rec.deepest : '—'}</strong><span>deepest</span></div>
+      <div><strong>${rec.bestScore}</strong><span>best score</span></div>
+      <div><strong>${rec.bestHaul}</strong><span>richest haul</span></div>
+      <div><strong>${rec.capitalsSlain}</strong><span>capitals slain</span></div>
+      <div><strong>${cleared1 ? '★ YES' : '—'}</strong><span>sector cleared</span></div>
+    </div>
+    <div class="hud schud">
+      <div class="hudcell"><label>HULL</label><div class="bar int"><i id="schullbar"></i></div><span id="schulltext">100</span></div>
+      <div class="hudcell"><label>SCORE</label><span id="scscore">0</span></div>
+      <div class="hudcell"><label>STAGE</label><span id="scstage">—</span></div>
+      <div class="hudcell"><label>ATTENTION</label><div class="bar trace"><i id="sctracebar"></i></div><span id="sctracetext">0%</span></div>
+    </div>
+    <div class="runline" id="scrunline">Stage — · Score 0 · Carrying nothing</div>
+    <div class="stage scstage-wrap">
+      <canvas id="scfield" width="400" height="640"></canvas>
+      <div id="scplate" class="scplate hidden"></div>
+      <div id="scchoice" class="gatechoice hidden">
+        <h2>THE STRETCH IS YOURS</h2>
+        <p id="scchoice-text">Press on up the Reach, or withdraw and bank everything you carry.</p>
+        <div class="gatechoice-btns">
+          <button id="scpress-btn" class="fightbtn descend" type="button">▲ PRESS ON</button>
+          <button id="scwithdraw-btn" class="fightbtn ascend" type="button">▼ WITHDRAW &amp; BANK</button>
+        </div>
+      </div>
+      <div id="scstage-msg" class="stage-msg">
+        <h2>Your ship is on the pad, ${esc(me.displayName || 'captain')}.</h2>
+        <p>Drag anywhere on the sky to fly — your ship rides above your thumb. Hold <strong>FIRE</strong> to shoot. Spin the <strong>fly wheel</strong> to choose a system, then hit <strong>ACTIVATE</strong>: every system burns for its own time, counts down in the open, and dies on schedule. Carriers drop hull, charge and score — fly through what falls. Refit at <a href="/galactic/bridge">the Bridge</a>, never mid-sortie.</p>
+        ${armoryHtml(me)}
+        <button id="scstartbtn" class="fightbtn">🕹 BEGIN THE CLIMB</button>
+        <p class="dim">The waves are dealt for YOUR sky — your level, your habits, the attention this sector holds on you. A pilot she has read gets the formations she prepared. A new pilot gets a gentler sky, once.</p>
+      </div>
+      <div id="scverdict" class="verdict hidden"></div>
+    </div>
+    <div class="sccontrols">
+      <div class="scwheel-box">
+        <canvas id="scwheel" width="148" height="148"></canvas>
+        <div class="scwheel-label" id="scwheel-label">SYSTEMS</div>
+      </div>
+      <button id="scactivate" class="scactivate" type="button" disabled><span id="scactivate-name">ACTIVATE</span><span id="scactivate-sub">spin the wheel</span></button>
+      <button id="scfire" class="scfire" type="button" disabled><span>FIRE</span><span>hold</span></button>
+    </div>
+    <div class="haulfeed panel"><h2>In the hold — unbanked until you withdraw or a capital falls</h2><ul id="schhaulfeed"><li class="dim">Empty hold. The Reach provides.</li></ul>
+    <p><button id="scabandonbtn" class="ghostbtn hidden" type="button">Abandon the sortie — withdraw with what you carry</button></p></div>
+    ${galacticBoardsHtml(state)}
+    <div class="arena-foot">
+      <span>1944 form flies the same eight stages under the same law: integrity and attention carry stage to stage, the haul rides unbanked, destruction takes the unbanked STURDY and RARE, and the Herald's fall banks it all and writes the receipt. Your flight log is the fight — the referee replays it, and a log that claims sky the ship cannot cross is void.</span>
+    </div>
+  </section>
+  <script>window.TA_SCROLL = true;</script>
+  <script src="/js/galactic-scroll.js"></script>`;
+  return shell('Fly the Climb — 1944', body, me);
 }
 
 // ---- THE BRIDGE: the captain's whole profile, in the theater's dress -------
@@ -1447,4 +1531,4 @@ function deckPage(state, opts) {
   return shell('Arena Deck', body, null);
 }
 
-module.exports = { esc, shell, landing, arenaPage, authPage, profilePage, fighterPage, webPage, verdictPage, challengePage, deckPage, maintenanceCard, pitPage, devilCardHtml, descentPage, galacticPage, galacticFlyPage, galacticBridgePage, shipSvg };
+module.exports = { esc, shell, landing, arenaPage, authPage, profilePage, fighterPage, webPage, verdictPage, challengePage, deckPage, maintenanceCard, pitPage, devilCardHtml, descentPage, galacticPage, galacticFlyPage, galacticScrollPage, galacticBridgePage, shipSvg };

@@ -446,7 +446,7 @@ try {
     check('the served RT client is the built one (wheel block + activation flag aboard)',
       rtJs.includes('RT-WHEEL-BEGIN') && rtJs.includes('TA_RT_ACTIVE') && rtJs.includes('rtWheelPick'));
     const build = await (await call(new Jar(), 'GET', '/')).text();
-    check('the build stamp names the real-time build', build.includes('2026.11.27-galactic-rt'));
+    check('the build stamp names the current build', build.includes('2026.11.27-galactic-1944'));
   }
 
   // ---- stage framing on the map, before any clear

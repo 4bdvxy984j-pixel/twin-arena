@@ -941,3 +941,70 @@ body.rt-on{overflow:hidden}
 .gstages-note{font-size:.72rem; color:var(--dim); font-style:italic; margin-left:.3rem}
 .gsec-hook{border-left:3px solid var(--violet); background:rgba(185,103,255,.07); padding:.55rem .8rem; font-size:.86rem}
 .gnode.hooked .gn-cap{color:#c9a0ff}
+
+/* ---- 1944 FORM: the scrolling sky -------------------------------------- */
+.scforms { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .6rem; }
+.scforms a, .scforms .scform-on {
+  padding: .38rem .7rem; border: 1px solid rgba(255,150,80,.35); border-radius: 999px;
+  font-size: .78rem; letter-spacing: .08em; text-decoration: none; color: #ffb37a;
+}
+.scforms .scform-on { background: rgba(255,110,50,.16); color: #ffd9ae; border-color: rgba(255,170,90,.7); }
+.scstage-wrap { position: relative; max-width: 430px; margin: 0 auto; }
+#scfield {
+  width: 100%; height: auto; display: block; border-radius: 10px;
+  border: 1px solid rgba(255,150,80,.28); background: #070a1e;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+  box-shadow: 0 0 44px rgba(255,90,40,.13), inset 0 0 60px rgba(0,0,0,.5);
+}
+.scplate {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  background: radial-gradient(ellipse at center, rgba(5,4,14,.25), rgba(5,4,14,.78));
+  pointer-events: none; padding: 1rem;
+}
+.scplate.hidden { display: none; }
+.scplate .scplate-kicker { font-size: .72rem; letter-spacing: .34em; color: #ffb37a; }
+.scplate h2 {
+  font-family: Georgia, 'Times New Roman', serif; font-size: 2rem; margin: .35rem 0 .3rem;
+  color: #ffe9d2; text-shadow: 0 0 24px rgba(255,110,50,.55); letter-spacing: .06em;
+}
+.scplate p { max-width: 300px; color: #cfd6ff; font-size: .9rem; margin: 0; }
+.scplate .scplate-boss { color: #ff5a4c; letter-spacing: .22em; font-size: .8rem; margin-top: .5rem; }
+.sccontrols {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: .6rem; max-width: 430px; margin: .7rem auto 0; padding: 0 .2rem;
+}
+.scwheel-box { position: relative; width: 118px; height: 118px; flex: 0 0 auto; }
+#scwheel { width: 118px; height: 118px; display: block; touch-action: none; }
+.scwheel-label {
+  position: absolute; left: 0; right: 0; bottom: -1.05rem; text-align: center;
+  font-size: .62rem; letter-spacing: .26em; color: #ffb37a;
+}
+.scactivate {
+  flex: 1 1 auto; min-height: 64px; border-radius: 12px; cursor: pointer;
+  border: 1px solid rgba(93,255,160,.45); background: rgba(20,40,30,.55); color: #c9ffe0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .1rem;
+  font-family: inherit;
+}
+.scactivate #scactivate-name { font-size: 1.02rem; letter-spacing: .14em; font-weight: 700; }
+.scactivate #scactivate-sub { font-size: .68rem; letter-spacing: .1em; color: #8fe6b4; }
+.scactivate:disabled { opacity: .42; cursor: default; }
+.scactivate.armed { border-color: #5dffa0; box-shadow: 0 0 18px rgba(93,255,160,.35); }
+.scactivate.burning { border-color: #ffd24a; color: #ffeeb0; box-shadow: 0 0 18px rgba(255,210,74,.3); }
+.scfire {
+  flex: 0 0 auto; width: 104px; height: 104px; border-radius: 50%; cursor: pointer;
+  border: 2px solid rgba(255,90,60,.75); color: #ffe2d2;
+  background: radial-gradient(circle at 50% 38%, rgba(255,120,70,.5), rgba(140,25,20,.65) 72%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: inherit; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.scfire span:first-child { font-size: 1.25rem; font-weight: 800; letter-spacing: .18em; }
+.scfire span:last-child { font-size: .62rem; letter-spacing: .24em; color: #ffb59a; }
+.scfire:disabled { opacity: .4; cursor: default; }
+.scfire.firing { box-shadow: 0 0 30px rgba(255,90,50,.65); transform: scale(.96); }
+.schud { max-width: 430px; margin-left: auto; margin-right: auto; }
+.gfight44 { margin-left: .4rem; }
+@media (max-width: 480px) {
+  .scfire { width: 92px; height: 92px; }
+  .scwheel-box, #scwheel { width: 104px; height: 104px; }
+}

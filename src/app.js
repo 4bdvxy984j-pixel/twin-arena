@@ -516,6 +516,58 @@ function dealGalacticEncounter(me, sortie) {
   sortie.encounter = n;
   sortie.awaitingChoice = false;
   const cleared = !!(game.galacticRecord(me).cleared && game.galacticRecord(me).cleared[String(sortie.sectorId)]);
+  // ---- 1944 FORM: the same stage of the same sortie, flown as a scroll.
+  // The waves are dealt from the encounter seed and the captain's own
+  // books — level, sector attention, the weapon she leans on and the one
+  // she never flies — and the referee replays the flight log against
+  // them. The director below settles it identically to a wheel fight.
+  if (sortie.form === 'scroll') {
+    const params = game.galacticEncounterParams(n, cleared);
+    const encSeed = (sortie.seed ^ Math.imul(n, 2654435761)) >>> 0;
+    const stats = game.effectiveStats(state, me, me.twinArmor || {}, {
+      gateHp: params.gateHp, roundMs: params.roundMs,
+      famShapes: game.galacticFamShapes(me, sortie.sectorId)
+    });
+    const rec = game.galacticRecord(me);
+    const use = me.toolUse || {};
+    const byUse = game.TOOL_IDS.slice().sort((a, b) => (use[b] || 0) - (use[a] || 0));
+    const waves = game.makeScrollWaves(encSeed, n, {
+      level: game.levelForXp(me.xp || 0),
+      attention: game.galacticAttention(state, me, sortie.sectorId),
+      dominantTool: byUse[0], weakestTool: byUse[byUse.length - 1],
+      rookie: (rec.sorties || 0) === 0 && game.levelForXp(me.xp || 0) <= 1,
+      cleared
+    });
+    const wornMap = game.wornGearMap(me);
+    const dealt = game.scrollDealt(me, {
+      hullMax: stats.combat.playerHp, startHull: sortie.integrity, startTrace: sortie.trace,
+      bodyTier: wornMap.body ? wornMap.body.tier : null,
+      teachTool: mostUsedTool(me.toolUse) || 'flood'
+    });
+    const isCapital = params.kind === 'capital';
+    const fight = {
+      id: rid(10), playerId: me.id, mode: 'galactic', form: 'scroll', sortieId: sortie.id,
+      encounter: n, kind: params.kind, bossId: isCapital ? game.GALACTIC_CAPITAL.id : null,
+      heart: false, bell: false, god: null, gearSerials: null,
+      stats, seed: encSeed, strikes: [], startedAt: Date.now(),
+      storm: false, pointsMult: 1, floodgates: !!state.config.floodgates,
+      scroll: { waves, dealt }
+    };
+    activeFights.set(fight.id, fight);
+    return {
+      fightId: fight.id, stats, strikes: [], mode: 'galactic', form: 'scroll',
+      scroll: { stage: waves.stage, durationMs: waves.durationMs, waves, dealt },
+      galactic: {
+        sortieId: sortie.id, sector: sortie.sectorId, encounter: n,
+        kind: params.kind, tier: params.tier, className: params.className, label: params.label,
+        boss: isCapital ? { id: game.GALACTIC_CAPITAL.id, name: game.GALACTIC_CAPITAL.name, line: game.GALACTIC_CAPITAL.line } : null,
+        score: sortie.score, haulCount: sortie.haul.length,
+        integrity: sortie.integrity, trace: sortie.trace,
+        attention: game.galacticAttention(state, me, sortie.sectorId),
+        clearedBefore: cleared
+      }
+    };
+  }
   const params = game.galacticEncounterParams(n, cleared);
   const encSeed = (sortie.seed ^ Math.imul(n, 2654435761)) >>> 0;
   const stats = game.effectiveStats(state, me, me.twinArmor || {}, {
@@ -575,14 +627,23 @@ function finishGalacticEncounter(res, me, fight, sim, problem, actions, claimedD
   }
   const settledActions = sim.outcome ? actions.filter(a => a && a.t <= sim.outcome.at + 250) : actions;
   // The Twin keeps the lesson of every encounter — filed as this sector's
-  // attention, and into her one global mind at the Arena rate.
-  game.teachGalactic(state, me, sortie.sectorId, settledActions);
+  // attention, and into her one global mind at the Arena rate. A scroll
+  // flight teaches in its own vocabulary (the gun's tool, the mods
+  // burned), translated by the scroll referee — raw movement samples
+  // are a flight path, not a shape, and they never enter her books.
+  const teachActs = fight.form === 'scroll' ? (sim.teachActions || []) : settledActions;
+  game.teachGalactic(state, me, sortie.sectorId, teachActs);
   if (sim.parries) me.parriesTotal = (me.parriesTotal || 0) + sim.parries;
-  for (const a of settledActions) {
-    if (a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:') && !String(a.tool || '').startsWith('mod:')) {
-      sortie.toolUseRun[a.tool] = (sortie.toolUseRun[a.tool] || 0) + 1;
+  if (fight.form !== 'scroll') {
+    for (const a of settledActions) {
+      if (a.tool !== 'parry' && a.tool !== 'bell' && a.tool !== 'mercy' && !String(a.tool || '').startsWith('ability:') && !String(a.tool || '').startsWith('mod:')) {
+        sortie.toolUseRun[a.tool] = (sortie.toolUseRun[a.tool] || 0) + 1;
+      }
     }
   }
+  // A scroll flight's own score — kills, grazes, the capital's bounty —
+  // rides the sortie's book whether the stage was cleared or not.
+  if (fight.form === 'scroll' && sim.score) sortie.score += sim.score;
   let clearedEnc = false, died = false, turned = false;
   if (sim.outcome && sim.outcome.result === 'win') clearedEnc = true;
   else if (sim.outcome && sim.outcome.result === 'lose') died = true;
@@ -612,6 +673,15 @@ function finishGalacticEncounter(res, me, fight, sim, problem, actions, claimedD
   // MODS: rolled after the gear from the same seeded rng; banked on the spot.
   const modDrops = clearedEnc ? game.rollGalacticMods(drng, me, kind) : [];
   sortie.integrity = died ? 0 : sim.integrityLeft;
+  if (fight.form === 'scroll' && clearedEnc) {
+    // THE CALM BETWEEN STRETCHES: a cleared scroll stage buys the crew a
+    // patchwork breather before the next climb — a third of the hull,
+    // give or take. The wheel battle sustains itself with Second Wind;
+    // the scrolling sky sustains itself with this — pressure stays,
+    // attrition stops being a death sentence dealt three stages early.
+    const cap = fight.stats.combat.playerHp;
+    sortie.integrity = Math.min(cap, sortie.integrity + Math.round(cap * 0.35));
+  }
   sortie.trace = sim.trace;
   sortie.deepest = Math.max(sortie.deepest || 0, n);
   if (clearedEnc) {
@@ -703,6 +773,9 @@ async function route(req, res) {
     return sendHtml(res, views.galacticPage(state, me));
   }
   if (method === 'GET' && p === '/galactic/fly') {
+    if (url.searchParams.get('form') === 'scroll') {
+      return sendHtml(res, views.galacticScrollPage(state, me));
+    }
     return sendHtml(res, views.galacticFlyPage(state, me));
   }
   if (method === 'GET' && p === '/galactic/bridge') {
@@ -1052,13 +1125,22 @@ async function route(req, res) {
     const fight = activeFights.get(String(f.fightId || ''));
     if (!fight || fight.playerId !== me.id) return sendJson(res, { error: 'fight not found or not yours' }, 404);
     activeFights.delete(fight.id);
-    const claimedDuration = Math.min(Math.max(0, +f.durationMs || 0), fight.stats.roundMs + 5000);
+    const isScroll = fight.mode === 'galactic' && fight.form === 'scroll';
+    const claimedDuration = Math.min(Math.max(0, +f.durationMs || 0),
+      (isScroll ? fight.scroll.waves.durationMs : fight.stats.roundMs) + 5000);
     const actions = Array.isArray(f.actions) ? f.actions : [];
     // The referee replays the round: strikes, integrity and trace are
     // server-computed, so the client's claimed ending is checked against the
     // truth — and where the truth is terminal (breach, thrown out, caught),
-    // the truth is what stands.
-    const sim = game.simulateRound(fight, actions, claimedDuration);
+    // the truth is what stands. A 1944 flight is replayed by the scroll
+    // referee against its dealt waves — same door, same law, second engine.
+    // The scroll replay always runs the whole stretch: a scroll outcome is
+    // stamped at its step's start, so bounding the replay by the claimed
+    // duration would truncate the very step that produces the outcome —
+    // the claim's clock never bounds the referee's.
+    const sim = isScroll
+      ? game.simulateScroll(fight, actions, fight.scroll.waves.durationMs + 1000)
+      : game.simulateRound(fight, actions, claimedDuration);
     let resolved = null;
     if (!sim.problem) {
       if (sim.outcome) {
@@ -1066,6 +1148,12 @@ async function route(req, res) {
       } else if (claimedDuration >= fight.stats.roundMs - 1500) {
         resolved = { result: 'lose', endReason: 'timeout', durationMs: claimedDuration };
       }
+    }
+    if (isScroll) {
+      // The scroll referee's outcome is terminal truth in the same shape;
+      // a scroll log with no outcome never reached the stretch's end.
+      const problem2 = sim.problem || (sim.outcome ? null : 'round ended without cause');
+      return finishGalacticEncounter(res, me, fight, sim, problem2, actions, claimedDuration);
     }
     const problem = sim.problem || (resolved ? null : 'round ended without cause');
     // THE DESCENT settles depth by depth through its own director (drops,
@@ -1224,6 +1312,7 @@ async function route(req, res) {
   if (method === 'POST' && p === '/api/galactic/start') {
     if (state.config.frozen) return sendJson(res, { error: 'frozen', message: 'The arena is frozen.' }, 423);
     if (!me.email) return sendJson(res, { error: 'members-only', message: 'The Galactic is members-only. Claim a profile to fly.' }, 403);
+    const gf = await bodyJson(req).catch(() => ({}));
     for (const s of activeSorties.values()) {
       if (s.playerId === me.id) return sendJson(res, { error: 'already flying', message: 'You are already out there. Finish or abandon that sortie first.' }, 409);
     }
@@ -1235,6 +1324,7 @@ async function route(req, res) {
       encounter: 0, encountersCleared: 0, deepest: 0, score: 0, xp: 0,
       haul: [], bankedValue: 0, capitalsSlain: 0, sectorCleared: false,
       integrity: 100, trace: 0, toolUseRun: {},
+      form: gf && gf.form === 'scroll' ? 'scroll' : 'rt',
       awaitingChoice: false, over: false, startedAt: Date.now()
     };
     const base = game.effectiveStats(state, me, me.twinArmor || {});

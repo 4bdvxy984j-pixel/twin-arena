@@ -1792,6 +1792,20 @@ function finishDescentRun(state, player, run, how) {
 }
 
 // ===========================================================================
+// 1944 MODE — the scroll engine (src/scroll.js), bound with this file's
+// own rng, mod tables and socket law, and re-exported under the game's
+// name so the sortie director calls it exactly as it calls the referee.
+// ===========================================================================
+const scrollEngine = require('./scroll.js')({
+  rng32, FITTED_MODS, DEPLOY_MODS, fittedMod, levelForXp
+});
+const {
+  SCROLL_FIELD, SCROLL_CLASSES, SCROLL_STAGES, SCROLL_MOD_TIMES,
+  HERALD_DEF, scrollStageDef, scrollEnemyPos, scrollHeraldPos, scrollHeraldPhase,
+  makeScrollWaves, scrollDealt, createScrollStepper, simulateScroll
+} = scrollEngine;
+
+// ===========================================================================
 // THE GALACTIC — G1 "THE THEATER": the Twin's war takes the sky.
 // One fighter, one build, one XP pool, one mind: a captain's tools become
 // weapons systems with IDENTICAL referee math (effectiveStats deals them),
@@ -2129,5 +2143,8 @@ module.exports = {
   GALACTIC_SECTORS, GALACTIC_CAPITAL, GALACTIC_LADDER, GALACTIC_TIERS, GALACTIC_XP,
   galacticEncounter, galacticEncounterParams, makeGalacticStrikes,
   galacticRecord, galacticSectorShapes, galacticFamShapes, galacticAttention,
-  teachGalactic, decayGalacticAttention, rollGalacticMods, finishGalacticSortie
+  teachGalactic, decayGalacticAttention, rollGalacticMods, finishGalacticSortie,
+  SCROLL_FIELD, SCROLL_CLASSES, SCROLL_STAGES, SCROLL_MOD_TIMES,
+  HERALD_DEF, scrollStageDef, scrollEnemyPos, scrollHeraldPos, scrollHeraldPhase,
+  makeScrollWaves, scrollDealt, createScrollStepper, simulateScroll
 };
